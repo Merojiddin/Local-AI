@@ -1,0 +1,4 @@
+# Local Chinese TTS — Python 3.12, Apple Silicon only.
+# Pinned to versions verified to work together.
+mlx-audio==0.4.5
+gradio==5.50.0

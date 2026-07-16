@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"/Users/chang/Documents/Local Ai\" || exit 0; git add -A 2>/dev/null; git diff --cached --quiet || git commit --quiet --no-verify -m \"auto-commit: $(git diff --cached --name-only | head -5 | tr '\\n' ' ')\" 2>/dev/null; git push --quiet origin main 2>/dev/null; exit 0",
+            "timeout": 60,
+            "statusMessage": "Auto-committing and pushing changes"
+          }
+        ]
+      }
+    ]
+  }
+}
