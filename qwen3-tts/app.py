@@ -82,6 +82,7 @@ def build_ui() -> "gr.Blocks":
         title="Chang 日日向上 · Local AI Toolbox",
         theme=branding.THEME,
         css=branding.CHANG_CSS,
+        head=branding.LIBRARY_HEAD,
         js=branding.FORCE_LIGHT_JS if force_light else None,
     ) as demo:
         lang_store = gr.BrowserState(tts.DEFAULT_LANG, storage_key="chang_tts_lang")
@@ -190,4 +191,6 @@ if __name__ == "__main__":
         inbrowser=os.environ.get("QWEN3_TTS_NO_BROWSER") != "1",
         show_error=True,
         favicon_path=str(logo_file) if logo_file else None,
+        # The library plays files straight from the outputs folder.
+        allowed_paths=[str(storage.outputs_dir().resolve())],
     )

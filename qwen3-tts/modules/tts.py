@@ -13,6 +13,7 @@ from __future__ import annotations
 import csv
 import filecmp
 import hashlib
+import html
 import inspect
 import json
 import re
@@ -23,6 +24,7 @@ import time
 import zipfile
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote
 
 import gradio as gr
 
@@ -48,7 +50,7 @@ MODELS = {
     "Fast — Qwen3-TTS 0.6B": "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit",
     "Higher Quality — Qwen3-TTS 1.7B": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
 }
-DEFAULT_MODEL = "Fast — Qwen3-TTS 0.6B"
+DEFAULT_MODEL = "Higher Quality — Qwen3-TTS 1.7B"
 
 MODEL_SHORT = {
     MODELS["Fast — Qwen3-TTS 0.6B"]: "0.6B",
@@ -918,7 +920,7 @@ def _fmt_size(n: int) -> str:
     return f"{max(1, n // 1024)} KB"
 
 
-def list_output_rows() -> list[list[str]]:
+def _output_files() -> list[Path]:
     try:
         files = [
             p for p in storage.outputs_dir().iterdir()
@@ -927,52 +929,72 @@ def list_output_rows() -> list[list[str]]:
     except OSError:
         return []
     files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    rows = []
-    for p in files:
+    return files
+
+
+def lib_html() -> str:
+    """Outputs listing with per-row buttons. Play/stop are pure JS against a
+    shared Audio element (functions in branding.LIBRARY_HEAD); reveal/preview
+    round-trip to Python through the hidden #lib-evt textbox."""
+    rows = [
+        '<div class="lib-row lib-head-row">'
+        "<span>File</span><span>Size</span><span>Modified</span><span></span></div>"
+    ]
+    for p in _output_files():
         st = p.stat()
-        rows.append([
-            p.name,
-            _fmt_size(st.st_size),
-            datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M"),
-        ])
-    return rows
+        ext = p.suffix.lower()
+        name = html.escape(p.name)
+        src = html.escape("/gradio_api/file=" + quote(str(p.resolve())))
+        btns = []
+        if ext in AUDIO_EXTS:
+            btns.append('<button class="lib-btn" title="Play" '
+                        'onclick="changLibPlay(this)">▶</button>')
+            btns.append('<button class="lib-btn" title="Stop" '
+                        'onclick="changLibStop()">⏹</button>')
+        elif ext in TEXT_EXTS:
+            btns.append('<button class="lib-btn" title="Preview" '
+                        "onclick=\"changLibEvt('preview', this)\">📄</button>")
+        btns.append('<button class="lib-btn" title="Show in Finder" '
+                    "onclick=\"changLibEvt('reveal', this)\">📂</button>")
+        rows.append(
+            f'<div class="lib-row" data-name="{name}" data-src="{src}">'
+            f'<span class="lib-name">{name}</span>'
+            f'<span class="lib-size">{_fmt_size(st.st_size)}</span>'
+            f'<span class="lib-date">'
+            f'{datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M")}</span>'
+            f'<span class="lib-actions">{"".join(btns)}</span></div>'
+        )
+    if len(rows) == 1:
+        rows.append('<div class="lib-empty">No files yet.</div>')
+    return f'<div class="lib-list">{"".join(rows)}</div>'
 
 
 def ui_files_refresh():
-    return gr.update(value=list_output_rows())
+    return gr.update(value=lib_html())
 
 
-def ui_file_select(evt: gr.SelectData):
-    """Row click: audio plays in the player, text files show their contents."""
-    row = getattr(evt, "row_value", None)
-    name = Path(str(row[0])).name if row else ""
+def ui_lib_event(payload: str):
+    """Reveal/preview clicks arriving from the library HTML via #lib-evt."""
+    try:
+        data = json.loads(payload or "{}")
+    except json.JSONDecodeError:
+        return gr.update()
+    name = Path(str(data.get("name", ""))).name
     path = storage.outputs_dir() / name
     if not name or not path.is_file():
-        raise gr.Error("File not found — refresh the list.")
-    ext = path.suffix.lower()
-    if ext in AUDIO_EXTS:
-        return (
-            gr.update(value=str(path), visible=True),
-            gr.update(value="", visible=False),
-            gr.update(value=str(path)),
-        )
-    if ext in TEXT_EXTS:
+        return gr.update()
+    if data.get("action") == "reveal":
+        subprocess.run(["open", "-R", str(path)], check=False)
+        return gr.update()
+    if data.get("action") == "preview" and path.suffix.lower() in TEXT_EXTS:
         try:
             content = path.read_text(encoding="utf-8-sig", errors="replace")
         except OSError as exc:
             raise gr.Error(f"Could not read file: {exc}")
         if len(content) > 20000:
             content = content[:20000] + "\n…"
-        return (
-            gr.update(value=None, visible=False),
-            gr.update(value=content, visible=True),
-            gr.update(value=str(path)),
-        )
-    return (
-        gr.update(value=None, visible=False),
-        gr.update(value=f"{name} — {ext} file, use the download button below.", visible=True),
-        gr.update(value=str(path)),
-    )
+        return gr.update(value=content, visible=True)
+    return gr.update()
 
 
 # --------------------------------------------------------------------------- #
@@ -1067,12 +1089,35 @@ def build_tts_tab(lang_component, settings: dict):
                         p_after = gr.Slider(0, 2, value=0.0, step=0.05, label=tr(L0, "p_after"))
                         p_between = gr.Slider(0, 2, value=0.3, step=0.05, label=tr(L0, "p_between"))
 
+                with gr.Group():
+                    with gr.Row(elem_id="lib-head"):
+                        sec_files = gr.Markdown(
+                            f"📁 **{tr(L0, 'tab_files')}**", elem_classes="section-head"
+                        )
+                        files_refresh_btn = gr.Button(
+                            "🔄", size="sm", scale=0, min_width=40, elem_classes="icon-btn"
+                        )
+                        files_open_btn = gr.Button(
+                            "📂", size="sm", scale=0, min_width=40, elem_classes="icon-btn"
+                        )
+                    files_list = gr.HTML(lib_html())
+                    file_text = gr.Textbox(
+                        label=tr(L0, "file_text"), lines=6, max_lines=12,
+                        visible=False, show_copy_button=True,
+                    )
+                    lib_evt = gr.Textbox(visible=False, elem_id="lib-evt")
+
         generate_btn.click(
             fn=ui_generate,
             inputs=[text, model_label, voice, mode, speed, style,
                     p_before, p_after, p_between, repeat, out_format, quality, lang_component],
             outputs=[audio_out, file_out, info_out],
-        )
+        ).then(ui_files_refresh, outputs=[files_list], show_progress="hidden")
+
+        files_refresh_btn.click(ui_files_refresh, outputs=[files_list], show_progress="hidden")
+        files_open_btn.click(lambda: storage.open_in_finder(storage.outputs_dir()))
+        lib_evt.input(ui_lib_event, inputs=[lib_evt], outputs=[file_text], show_progress="hidden")
+        tab_single.select(ui_files_refresh, outputs=[files_list], show_progress="hidden")
 
     with gr.Tab(tr(L0, "tab_batch")) as tab_batch:
         batch_desc = gr.Markdown(tr(L0, "batch_desc"))
@@ -1122,36 +1167,6 @@ def build_tts_tab(lang_component, settings: dict):
             outputs=[batch_table, batch_zip, batch_summary],
         )
 
-    with gr.Tab(tr(L0, "tab_files")) as tab_files:
-        files_hint = gr.Markdown(tr(L0, "files_hint"), elem_classes="hint-text")
-        with gr.Row(equal_height=False):
-            with gr.Column(scale=6):
-                with gr.Row():
-                    files_refresh_btn = gr.Button(tr(L0, "refresh"), size="sm")
-                    files_open_btn = gr.Button(tr(L0, "open_folder"), size="sm")
-                files_table = gr.Dataframe(
-                    headers=["File", "Size", "Modified"],
-                    value=list_output_rows(),
-                    interactive=False, wrap=True, max_height=460,
-                    label=tr(L0, "files_table"),
-                )
-            with gr.Column(scale=5):
-                file_player = gr.Audio(
-                    label=tr(L0, "file_player"), type="filepath", elem_id="lib-audio"
-                )
-                file_text = gr.Textbox(
-                    label=tr(L0, "file_text"), lines=14, max_lines=20,
-                    visible=False, show_copy_button=True,
-                )
-                file_dl = gr.DownloadButton(tr(L0, "download"), size="sm")
-
-        files_refresh_btn.click(ui_files_refresh, outputs=[files_table], show_progress="hidden")
-        tab_files.select(ui_files_refresh, outputs=[files_table], show_progress="hidden")
-        files_open_btn.click(lambda: storage.open_in_finder(storage.outputs_dir()))
-        files_table.select(
-            ui_file_select, outputs=[file_player, file_text, file_dl], show_progress="hidden"
-        )
-
     footer = gr.Markdown(
         f"{tr(L0, 'footer')} `{storage.outputs_dir()}`", elem_classes="app-footer"
     )
@@ -1165,11 +1180,10 @@ def build_tts_tab(lang_component, settings: dict):
         sec_pron, mode, speed, style, acc_examples, acc_presets,
         preset_dd, load_preset_btn, del_preset_btn, preset_name, save_preset_btn,
         p_before, p_after, p_between, repeat,
+        sec_files, file_text,
         batch_desc, batch_text, batch_csv, b_defaults, b_model, b_voice, b_speed,
         b_mode, b_style, b_acc_adv, b_before, b_after, b_between, b_repeat,
         b_format, b_quality, batch_btn, batch_zip, batch_table,
-        tab_files, files_hint, files_refresh_btn, files_open_btn, files_table,
-        file_player, file_text, file_dl,
         footer,
     ]
 
@@ -1203,6 +1217,8 @@ def build_tts_tab(lang_component, settings: dict):
             gr.update(label=tr(lg, "p_after")),                                      # p_after
             gr.update(label=tr(lg, "p_between")),                                    # p_between
             gr.update(label=tr(lg, "repeat")),                                       # repeat
+            gr.update(value=f"📁 **{tr(lg, 'tab_files')}**"),                        # sec_files
+            gr.update(label=tr(lg, "file_text")),                                    # file_text
             gr.update(value=tr(lg, "batch_desc")),                                   # batch_desc
             gr.update(label=tr(lg, "batch_text")),                                   # batch_text
             gr.update(label=tr(lg, "batch_csv")),                                    # batch_csv
@@ -1222,14 +1238,6 @@ def build_tts_tab(lang_component, settings: dict):
             gr.update(value=tr(lg, "batch_btn")),                                    # batch_btn
             gr.update(label=tr(lg, "zip")),                                          # batch_zip
             gr.update(label=tr(lg, "table")),                                        # batch_table
-            gr.update(label=tr(lg, "tab_files")),                                    # tab_files
-            gr.update(value=tr(lg, "files_hint")),                                   # files_hint
-            gr.update(value=tr(lg, "refresh")),                                      # files_refresh_btn
-            gr.update(value=tr(lg, "open_folder")),                                  # files_open_btn
-            gr.update(label=tr(lg, "files_table")),                                  # files_table
-            gr.update(label=tr(lg, "file_player")),                                  # file_player
-            gr.update(label=tr(lg, "file_text")),                                    # file_text
-            gr.update(label=tr(lg, "download")),                                     # file_dl
             gr.update(value=f"{tr(lg, 'footer')} `{storage.outputs_dir()}`"),        # footer
         ]
 

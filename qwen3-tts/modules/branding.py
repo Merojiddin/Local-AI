@@ -162,8 +162,40 @@ label[data-testid$="-radio-label"] {
 fieldset.block { gap: 2px !important; }
 
 /* ---- audio players: shrink the empty placeholder ---- */
-#tts-audio .empty, #lib-audio .empty { min-height: 56px !important; }
-#tts-audio, #lib-audio { min-height: 0 !important; }
+#tts-audio .empty { min-height: 56px !important; }
+#tts-audio { min-height: 0 !important; }
+
+/* ---- library: header icon buttons + per-row file list ---- */
+#lib-head { align-items: center; gap: 4px !important; }
+#lib-head .section-head { flex-grow: 1; }
+.icon-btn {
+  padding: 2px 6px !important; font-size: 0.95rem !important;
+  min-width: 40px !important; max-width: 44px !important;
+}
+.lib-list {
+  border: 1px solid var(--chang-line); border-radius: 8px; background: #fff;
+  max-height: 320px; overflow-y: auto; font-size: 0.8rem;
+}
+.lib-row {
+  display: grid; grid-template-columns: 1fr 58px 112px 104px;
+  gap: 6px; align-items: center; padding: 4px 8px;
+  border-bottom: 1px solid var(--chang-line);
+}
+.lib-row:last-child { border-bottom: none; }
+.lib-head-row {
+  font-weight: 700; position: sticky; top: 0; z-index: 1; background: #FFFDF8;
+}
+.lib-name { overflow-wrap: anywhere; }
+.lib-size, .lib-date { color: #7A5C3E; font-size: 0.72rem; white-space: nowrap; }
+.lib-actions { display: flex; gap: 4px; justify-content: flex-end; }
+.lib-btn {
+  border: 1px solid var(--chang-line); background: #FFFDF8; border-radius: 6px;
+  padding: 1px 7px; cursor: pointer; font-size: 0.85rem; line-height: 1.4;
+}
+.lib-btn:hover { background: #FFF3E0; border-color: var(--chang-orange); }
+.lib-row.playing { background: #FFF7E8; }
+.lib-row.playing .lib-name { color: var(--chang-red); font-weight: 700; }
+.lib-empty { padding: 10px; color: #a58969; }
 
 /* ---- tabs ---- */
 .tab-nav button, button.tab-item { font-weight: 600 !important; }
@@ -175,6 +207,36 @@ fieldset.block { gap: 2px !important; }
 /* ---- results footer ---- */
 .result-info p { font-size: 0.8rem !important; margin: 2px 0 !important; }
 .app-footer p { font-size: 0.72rem !important; color: #a58969 !important; margin: 2px 0 0 !important; }
+"""
+
+# One shared Audio element for the library: clicking ▶ on a row stops whatever
+# was playing and plays that row's file. Reveal/preview clicks are forwarded to
+# Python by writing JSON into the hidden #lib-evt textbox.
+LIBRARY_HEAD = """
+<script>
+window.changLibStop = () => {
+  const a = window._changLibAudio;
+  if (a) { a.pause(); a.currentTime = 0; }
+  document.querySelectorAll('.lib-row.playing').forEach(r => r.classList.remove('playing'));
+};
+window.changLibPlay = (btn) => {
+  const row = btn.closest('.lib-row');
+  if (!row || !row.dataset.src) return;
+  window.changLibStop();
+  const a = window._changLibAudio = window._changLibAudio || new Audio();
+  a.src = row.dataset.src;
+  a.onended = () => row.classList.remove('playing');
+  a.play();
+  row.classList.add('playing');
+};
+window.changLibEvt = (action, btn) => {
+  const row = btn.closest('.lib-row');
+  const box = document.querySelector('#lib-evt textarea');
+  if (!row || !box) return;
+  box.value = JSON.stringify({action: action, name: row.dataset.name, t: Date.now()});
+  box.dispatchEvent(new Event('input', {bubbles: true}));
+};
+</script>
 """
 
 # Keep the whole app in light mode so the warm palette and logo always match.

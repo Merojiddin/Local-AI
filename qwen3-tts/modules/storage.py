@@ -22,7 +22,7 @@ DEFAULT_SETTINGS = {
     "models_dir": "~/Library/Application Support/LocalAIToolbox/models",
     "outputs_dir": "outputs",
     "indexes_dir": "data/indexes",
-    "default_tts_model": "Fast — Qwen3-TTS 0.6B",
+    "default_tts_model": "Higher Quality — Qwen3-TTS 1.7B",
     "force_light_theme": True,
     "auto_unload": True,
     "auto_unload_minutes": 10,
