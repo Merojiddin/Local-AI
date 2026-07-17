@@ -12,6 +12,7 @@ leave your computer.
 | 🎙 Transcribe | Speech-to-text for WAV/MP3/M4A/MP4, zh/en/vi + auto-detect, translate-to-English, TXT/SRT export | Whisper large-v3-turbo (≈1.7 GB) |
 | 🔎 OCR | Text extraction (zh / en / vi) from images & PDFs | built into macOS — no download |
 | 📚 Documents | Index PDF/DOCX/TXT/MD files, semantic search, optional re-ranking & answers | Qwen3-Embedding 0.6B (≈0.4 GB), optional Reranker (≈0.4 GB) |
+| 🏗 Generator | Structured JSON generation (dictionaries, examples, quizzes …) from your own document collections: word queues, validation, repair, review, exports | Qwen3 4B + Embedding (Reranker optional) |
 | 📦 Models | Install / remove / verify models, presets, disk-space checks | — |
 | ⚙️ Settings | Folders (incl. external SSD for models), theme, auto-unload, cache cleaning | — |
 
@@ -68,8 +69,46 @@ its downloaded weights — never your audio, documents or indexes.
 | Existing TTS weights from the old app | `models/` inside the project (still used, not re-downloaded) |
 | Generated audio & transcripts | `outputs/` |
 | Document search indexes | `data/indexes/` |
+| Generator source collections | `data/collections/<name>/` (copied files + per-collection index) |
+| Generator projects | `data/generator_projects/<id>/` (config, queue, results.json, backups, exports) |
 | TTS audio cache | `cache/` |
 | Temporary files | `cache/temp/` (safe to clear from Settings) |
+
+## 🏗 Generator — structured JSON from your own documents
+
+Turns word lists into validated JSON entries (e.g. an HSK dictionary), one
+word at a time, using **only your uploaded reference documents** as evidence.
+
+**Quick start**
+
+1. **Generator tab → B· Source collections → Manage collections**: create a
+   collection (e.g. *Official HSK word lists*), add files
+   (PDF / scanned PDF / DOCX / TXT / MD / CSV / JSON / PNG / JPG — scans and
+   images are OCR'd automatically), then press **🔄 Rebuild index**.
+   Make one collection per source type — they are never merged.
+2. **A· Project**: create a project (e.g. *HSK Dictionary*).
+3. Tick the collections the project may use; optionally mark some as
+   **authoritative** and map fields to collections in
+   *Field-specific sources* (e.g. `{"examples": ["Example sentences"]}`).
+4. **D· Prompt / schema**: paste your prompt template (variables like
+   `{{word}}`, `{{retrieved_sources}}`, `{{json_schema}}`) and either a JSON
+   Schema or one example object; list the required keys.
+5. **C· Input words**: paste words (one per line or 、-separated) or upload
+   TXT / CSV / JSON (columns: `hanzi, pinyin, hsk_old, hsk_new, topic, notes,
+   expected_pos, custom_instruction`). Duplicates are detected automatically.
+6. Press **💾 Save project settings**, then **▶️ Start**.
+   Each word is retrieved → generated → validated → repaired if needed →
+   appended to `results.json` (always valid JSON, atomic writes, timestamped
+   backups). Failures land in `failures.json` and can be retried.
+7. Watch progress, pause/resume/stop/skip any time — the queue survives app
+   and Mac restarts (press Start again to continue).
+8. Review each word in **H· Review & edit** (sources shown beside the JSON),
+   approve/reject, edit inline, or regenerate single fields.
+9. Export as JSON / JSONL / CSV / ZIP from the Results panel.
+
+Output tokens go up to **16,384** (default 8,192); the context estimator
+warns before anything overflows and retrieved text is trimmed before the
+output allowance is ever reduced.
 
 ## Interface language
 
