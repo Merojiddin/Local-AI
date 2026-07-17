@@ -22,6 +22,8 @@ DEFAULT_SETTINGS = {
     "models_dir": "~/Library/Application Support/LocalAIToolbox/models",
     "outputs_dir": "outputs",
     "indexes_dir": "data/indexes",
+    "collections_dir": "data/collections",
+    "generator_dir": "data/generator_projects",
     "default_tts_model": "Higher Quality — Qwen3-TTS 1.7B",
     "force_light_theme": True,
     "auto_unload": True,
@@ -71,6 +73,18 @@ def outputs_dir() -> Path:
 
 def indexes_dir() -> Path:
     p = _resolve(load_settings()["indexes_dir"])
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def collections_dir() -> Path:
+    p = _resolve(load_settings()["collections_dir"])
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def generator_dir() -> Path:
+    p = _resolve(load_settings()["generator_dir"])
     p.mkdir(parents=True, exist_ok=True)
     return p
 
