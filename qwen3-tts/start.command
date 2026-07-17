@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-# Local Chinese TTS — start the app. Double-click this file in Finder.
+# Chang Local AI Toolbox — start the app. Double-click this file in Finder.
 # ============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,7 +13,7 @@ hold_open() {
 }
 
 echo "============================================================"
-echo " Local Chinese TTS — starting"
+echo " Chang Local AI Toolbox — starting"
 echo " Folder: $SCRIPT_DIR"
 echo "============================================================"
 
@@ -27,7 +27,7 @@ fi
 source .venv/bin/activate || { echo "❌ Could not activate .venv."; hold_open; exit 1; }
 
 # --- Verify dependencies -----------------------------------------------------
-python -c "import gradio, mlx_audio" 2>/dev/null || {
+python -c "import gradio, mlx_audio, mlx_lm, psutil" 2>/dev/null || {
     echo "❌ Dependencies missing. Please run install.command again."
     hold_open
     exit 1
@@ -36,6 +36,11 @@ if ! command -v ffmpeg >/dev/null 2>&1; then
     echo "⚠️  FFmpeg not found. Install it with:  brew install ffmpeg"
 fi
 
+echo ""
+echo "Note: optional models (chat, vision, whisper, embedding …) are NOT"
+echo "downloaded automatically. Install them any time from the 📦 Models tab"
+echo "inside the app, or with manage_models.command."
+echo ""
 echo "Opening http://127.0.0.1:7860 in your browser…"
 echo "To stop the app: close this window, or press Control + C here."
 echo ""

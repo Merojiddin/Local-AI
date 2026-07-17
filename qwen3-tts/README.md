@@ -1,159 +1,86 @@
-# Local Chinese Text-to-Speech (Qwen3-TTS)
+# Chang Local AI Toolbox (日日向上)
 
-A simple, fully **local** Mandarin Chinese text-to-speech web app for Apple
-Silicon Macs (M1/M2/M3/M4). It runs entirely on your Mac — **no cloud, no
-login, no account, no database**. Your text never leaves your computer.
+One compact local AI app for Apple Silicon Macs — **everything runs on your
+Mac**: no cloud, no login, no database. Your text, audio and documents never
+leave your computer.
 
-It uses:
+| Tab | What it does | Model (installed separately) |
+|---|---|---|
+| 🎧 TTS | Chinese text-to-speech: word / phrase / sentence / paragraph modes, style instructions, batch + CSV, caching, WAV/MP3 | Qwen3-TTS 0.6B (≈1.8 GB) and/or 1.7B (≈2.9 GB) |
+| 💬 Chat | Chat & coding assistant, system prompt, temperature, file upload, project-folder questions | Qwen3 4B 4-bit (≈2.3 GB) |
+| 🖼 Vision | Image / homework / screenshot analysis, PDF pages | Qwen3-VL 4B 4-bit (≈3.2 GB) |
+| 🎙 Transcribe | Speech-to-text for WAV/MP3/M4A/MP4, zh/en/vi + auto-detect, translate-to-English, TXT/SRT export | Whisper large-v3-turbo (≈1.7 GB) |
+| 🔎 OCR | Text extraction (zh / en / vi) from images & PDFs | built into macOS — no download |
+| 📚 Documents | Index PDF/DOCX/TXT/MD files, semantic search, optional re-ranking & answers | Qwen3-Embedding 0.6B (≈0.4 GB), optional Reranker (≈0.4 GB) |
+| 📦 Models | Install / remove / verify models, presets, disk-space checks | — |
+| ⚙️ Settings | Folders (incl. external SSD for models), theme, auto-unload, cache cleaning | — |
 
-- **Python 3.12**
-- **Gradio** (the web interface)
-- **MLX-Audio** with two Qwen3-TTS models
-- **FFmpeg** (for MP3 conversion, pauses, and repeats)
+Only **one heavy model is in memory at a time** (safe for 16 GB Macs); the
+status bar shows the loaded model, RAM use and current task, plus an
+**Unload model** button.
 
-Two models are included:
+## Requirements
 
-| Choice          | Model                                                        | Notes                    |
-| --------------- | ------------------------------------------------------------ | ------------------------ |
-| Fast (default)  | `mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit`          | Quicker, lighter         |
-| Higher Quality  | `mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit`          | Better voice, a bit slower |
+- Apple Silicon Mac (M1 or newer), tested on MacBook Air M2 / 16 GB
+- macOS with Homebrew; Python 3.12 and FFmpeg are installed automatically
+- Disk space depends on the models you choose (up to ~8 GB for the "Full" preset)
 
----
+## First-time installation
 
-## For a completely clean Mac — step by step
+1. Open Terminal once (⌘ + Space, type "Terminal") to make the scripts
+   executable — drag the project folder into the Terminal window to
+   auto-fill the path (paths with spaces are fine):
 
-### 1. Open Terminal
-- Press **Command (⌘) + Space** to open Spotlight.
-- Type **Terminal** and press **Return**. A text window opens. You only need it
-  for a couple of commands.
-
-### 2. Save the project
-- Put this whole `qwen3-tts` folder anywhere you like, for example inside your
-  **Documents** folder. Folder names with spaces are fine.
-
-### 3. Make the installer runnable (one time)
-In Terminal, type `chmod +x ` (with a trailing space), then **drag the
-`install.command` file from Finder into the Terminal window** and press
-**Return**. Do the same for `start.command`. For example:
-
-```bash
-chmod +x "/path/to/qwen3-tts/install.command"
-chmod +x "/path/to/qwen3-tts/start.command"
-```
-
-(Dragging the file fills in the correct path automatically, even with spaces.)
-
-### 4. Run the installer
-- In **Finder**, double-click **`install.command`**.
-- If macOS says it "cannot be opened because it is from an unidentified
-  developer", **right-click** the file → **Open** → **Open**. You only do this
-  once.
-- The installer will:
-  - check you are on Apple Silicon,
-  - make sure Homebrew, Python 3.12, and FFmpeg are present,
-  - create a private `.venv` environment,
-  - install the Python packages,
-  - **download both models**,
-  - create the `outputs` and `cache` folders.
-
-> **If Homebrew is missing**, the installer will stop and print one line for you
-> to paste into Terminal to install Homebrew, then just run `install.command`
-> again.
-
-### 5. How long the download takes / storage needed
-- **Downloading the models** can take from a few minutes to ~30 minutes
-  depending on your internet speed. This happens **only once**.
-- The models are stored **inside the project**, in the `models/` folder (not in
-  a hidden system cache), so everything lives in one place.
-- **Approximate storage:**
-  - Python packages + environment: ~2–4 GB
-  - Both models (8-bit), in `models/`: ~4.7 GB total (~1.8 GB + ~2.9 GB)
-  - Generated audio: small (a few KB–MB per clip)
-  - **Plan for about 8–10 GB free** to be comfortable.
-
-### 6. Start the app
-- Double-click **`start.command`**.
-- Your browser opens automatically at **http://127.0.0.1:7860**.
-- If it does not open, type that address into your browser yourself.
-- The **first time** you use a model in the app it may take a moment to load
-  into memory; a "Loading model…" message appears.
-
-### 7. Stop the app
-- Close the Terminal window that `start.command` opened, **or** click that
-  window and press **Control + C**.
-
-### 8. Where generated files are saved
-- Everything is saved in the **`outputs`** folder inside `qwen3-tts`.
-- Filenames include the Chinese text, voice, model, mode, and a short hash, e.g.
-  `你好_Vivian_0.6B_word_1a2b3c4d.mp3`.
-- Batch runs also produce a `batch_YYYYMMDD_HHMMSS.zip` and a
-  `batch_results_YYYYMMDD_HHMMSS.csv` in `outputs`.
-
----
-
-## Using the app
-
-- **Text** — paste Chinese text into the large box (Chinese only; there is no
-  language selector).
-- **Voice and Model** — pick a voice (Vivian, Serena, Uncle_Fu, Dylan, Eric) and
-  the Fast or Higher Quality model.
-- **Pronunciation Settings**
-  - **Mode**: *Single Word* (slower, clearer), *Vocabulary Phrase* (clear with a
-    short pause), *Sentence* (natural), *Paragraph* (natural with sentence
-    pauses).
-  - **Speed**: 0.5x–1.5x (handled by the model, so pitch stays natural).
-  - **Style instruction** (optional): e.g. "像中文老师一样，慢速清晰地朗读".
-  - **Pauses**: before / after / between repeats (0–2 seconds).
-  - **Repeat**: 1–5 times — handy for vocabulary practice.
-- **Output Settings** — MP3 (default) or WAV; MP3 quality 128 / 192 (default) /
-  256 kbps.
-- **Generate** — click **Generate Audio**. You get a player, a download, the
-  saved path, the model and voice used, the generation time, and whether it was
-  newly generated or loaded from cache.
-- **Batch Generation** — paste one item per line **or** upload a CSV with
-  columns `text, voice, model, mode, speed` (only `text` is required). You get a
-  results table, a ZIP of all audio, and a results CSV.
-
-### Caching
-The app never regenerates audio when **all** settings are identical (text,
-model, voice, mode, speed, style, pauses, repeat count, format, and quality). It
-uses a deterministic hash, so repeated clicks are instant.
-
----
-
-## Uninstall everything
-
-1. **Delete the project folder** (`qwen3-tts`). Because the models live inside
-   it (in `models/`), this removes everything: the app, the `.venv`, both
-   models, the `cache`, and all generated audio. That's the whole uninstall.
-2. *(Optional)* If you no longer want the shared tools:
    ```bash
-   brew uninstall ffmpeg
-   brew uninstall python@3.12
+   chmod +x "/path/to/qwen3-tts/"*.command
    ```
-   Skip this if other apps use them.
 
----
+2. In **Finder**, double-click **`install.command`**.
+   If macOS warns about an unidentified developer: right-click → **Open** → **Open**.
+   The installer checks Homebrew / Python 3.12 / FFmpeg, creates or reuses
+   `.venv`, installs the pinned Python packages, then **asks which models to
+   install**:
 
-## Common error fixes
+   | Preset | Contents |
+   |---|---|
+   | 1. Minimal TTS | Qwen3-TTS 0.6B |
+   | 2. TTS Quality | both TTS models |
+   | 3. Teaching Essentials | both TTS + Whisper + OCR + Embedding |
+   | 4. Developer | both TTS + Qwen3 4B + Whisper + OCR |
+   | 5. Full Installation | everything (~8 GB download) |
+   | 6. Custom | pick models one by one |
 
-| Problem | Fix |
-| --- | --- |
-| **"cannot be opened… unidentified developer"** | Right-click the `.command` file → **Open** → **Open**. |
-| **`install.command` does nothing / "permission denied"** | Run `chmod +x` on it (see step 3). |
-| **"Homebrew is required"** | Paste the Homebrew install line the installer prints, then run `install.command` again. |
-| **"FFmpeg not found" in the app** | Run `brew install ffmpeg`, then restart the app. |
-| **Model download failed / network error** | Check your internet connection and run `install.command` again (downloads resume). |
-| **"Insufficient memory"** | Close other apps, use the **Fast (0.6B)** model, and shorter text. |
-| **App won't start / "Dependencies missing"** | Run `install.command` again. |
-| **Port 7860 already in use** | Close the other app on that port, or quit any earlier copy of this app. |
-| **CSV rejected** | Make sure the first row has a `text` column header. Allowed columns: `text, voice, model, mode, speed`. |
+   Nothing is downloaded without asking; the estimated download size and your
+   free disk space are shown first.
 
----
+3. Start the app by double-clicking **`start.command`** —
+   it opens <http://127.0.0.1:7860> in your browser.
 
-## Notes / limitations
-- Apple Silicon only (MLX runs on the Mac GPU). Intel Macs are not supported.
-- Only **one** model is kept in memory at a time to stay comfortable on 16 GB
-  RAM; switching models unloads the previous one first.
-- Speed is applied by the model itself (natural, pitch-preserving). Pauses,
-  repeats, and MP3 conversion are done with FFmpeg.
+Models can be installed or removed **at any time** from the 📦 Models tab or
+by double-clicking **`manage_models.command`**. Removing a model deletes only
+its downloaded weights — never your audio, documents or indexes.
+
+## Where things live
+
+| What | Where |
+|---|---|
+| Model weights | `~/Library/Application Support/LocalAIToolbox/models` (changeable in Settings, e.g. to an external SSD) |
+| Existing TTS weights from the old app | `models/` inside the project (still used, not re-downloaded) |
+| Generated audio & transcripts | `outputs/` |
+| Document search indexes | `data/indexes/` |
+| TTS audio cache | `cache/` |
+| Temporary files | `cache/temp/` (safe to clear from Settings) |
+
+## Interface language
+
+The header pill switches the TTS tab between Tiếng Việt / English / 中文
+(remembered per browser).
+
+## Troubleshooting
+
+- **"… is not installed. Open the Models tab"** — that feature's model has not
+  been downloaded yet; install it from 📦 Models.
+- **Slow first response** — the model is loading; watch the status bar.
+- **Memory warning in the status bar** — close other apps or press
+  ⏏️ Unload model.
+- **FFmpeg missing** — `brew install ffmpeg`, then restart the app.

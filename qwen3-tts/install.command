@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-# Local Chinese TTS — one-time installer for macOS (Apple Silicon)
+# Chang Local AI Toolbox — one-time installer for macOS (Apple Silicon)
 # Double-click this file in Finder to run it.
 # ============================================================================
 
@@ -19,7 +19,7 @@ fail() {
 }
 
 echo "============================================================"
-echo " Local Chinese TTS — Installer"
+echo " Chang Local AI Toolbox — Installer"
 echo " Folder: $SCRIPT_DIR"
 echo "============================================================"
 
@@ -61,6 +61,8 @@ echo "Using FFmpeg: $(command -v ffmpeg)"
 if [ ! -d ".venv" ]; then
     echo "Creating virtual environment (.venv)…"
     "$PYTHON_BIN" -m venv .venv || fail "Could not create the virtual environment."
+else
+    echo "Reusing existing virtual environment (.venv)."
 fi
 # shellcheck disable=SC1091
 source .venv/bin/activate || fail "Could not activate the virtual environment."
@@ -73,18 +75,21 @@ echo "Installing Python requirements (this can take a few minutes)…"
 python -m pip install -r requirements.txt || fail "Could not install requirements."
 
 # --- Folders -----------------------------------------------------------------
-mkdir -p outputs cache
+mkdir -p outputs cache/temp data/indexes
 touch outputs/.gitkeep
 
-# --- Download both models ----------------------------------------------------
+# --- Model selection (nothing is downloaded without asking) -------------------
 echo ""
-echo "Downloading both Qwen3-TTS models (several GB, can take a while)…"
-python app.py --download || fail "Model download failed. Check your internet connection."
+echo "============================================================"
+echo " Model installation"
+echo "============================================================"
+python manage_models.py --first-run || fail "Model installation failed."
 
 echo ""
 echo "============================================================"
 echo " ✅ INSTALL COMPLETE"
 echo " Start the app by double-clicking:  start.command"
+echo " Manage models any time with:       manage_models.command"
 echo "============================================================"
 echo ""
 read -r -p "Press Enter to close this window."

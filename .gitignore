@@ -7,3 +7,5 @@ cache/
 outputs/
 test_outputs/
 **/.claude/settings.local.json
+qwen3-tts/data/
+qwen3-tts/settings.json
