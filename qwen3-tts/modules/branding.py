@@ -15,7 +15,11 @@ from .storage import BASE_DIR
 ASSETS_DIR = BASE_DIR / "assets"
 ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 
+# The official Chang logo lives in assets/. logo_header.png is a small
+# pre-resized copy embedded inline in the page header; logo.png is the
+# full-resolution original (also used as the favicon).
 LOGO_FILES = ("logo.png", "logo.jpg", "logo.jpeg", "logo.webp", "logo.svg")
+HEADER_LOGO = "logo_header.png"
 LOGO_MIME = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
@@ -24,32 +28,7 @@ LOGO_MIME = {
     ".svg": "image/svg+xml",
 }
 
-FALLBACK_LOGO_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 430">
-  <defs>
-    <linearGradient id="ray" x1="0" y1="1" x2="0.55" y2="0">
-      <stop offset="0" stop-color="#FDB913"/>
-      <stop offset="0.45" stop-color="#F58220"/>
-      <stop offset="1" stop-color="#E8380D"/>
-    </linearGradient>
-    <linearGradient id="word" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#E8380D"/>
-      <stop offset="0.6" stop-color="#F58220"/>
-      <stop offset="1" stop-color="#FDB913"/>
-    </linearGradient>
-  </defs>
-  <g>
-    <path d="M250 296 C214 208 212 106 250 40 C288 106 286 208 250 296 Z" fill="url(#ray)" transform="rotate(-66 250 300)"/>
-    <path d="M250 296 C214 208 212 106 250 40 C288 106 286 208 250 296 Z" fill="url(#ray)" transform="rotate(-44 250 300)"/>
-    <path d="M250 296 C214 208 212 106 250 40 C288 106 286 208 250 296 Z" fill="url(#ray)" transform="rotate(-22 250 300)"/>
-    <path d="M250 296 C214 208 212 106 250 40 C288 106 286 208 250 296 Z" fill="url(#ray)"/>
-    <path d="M250 296 C214 208 212 106 250 40 C288 106 286 208 250 296 Z" fill="url(#ray)" transform="rotate(22 250 300)"/>
-    <path d="M250 296 C214 208 212 106 250 40 C288 106 286 208 250 296 Z" fill="url(#ray)" transform="rotate(44 250 300)"/>
-    <path d="M250 296 C214 208 212 106 250 40 C288 106 286 208 250 296 Z" fill="url(#ray)" transform="rotate(66 250 300)"/>
-  </g>
-  <path d="M206 300 A44 44 0 0 1 294 300 Z" fill="#FFDF00"/>
-  <text x="255" y="402" font-family="'Snell Roundhand','Brush Script MT',cursive" font-size="105" font-weight="700" fill="url(#word)" text-anchor="middle">Chang</text>
-  <text x="420" y="348" font-family="'PingFang SC','Hiragino Sans GB',sans-serif" font-size="40" font-weight="600" letter-spacing="12" fill="#F5A623">日日向上</text>
-</svg>"""
+_LOGO_URI_CACHE: dict[tuple[str, float], str] = {}
 
 
 def find_logo_file() -> Path | None:
@@ -63,14 +42,27 @@ def find_logo_file() -> Path | None:
     return None
 
 
-def logo_data_uri() -> str:
-    p = find_logo_file()
-    if p is not None:
+def _header_logo_file() -> Path | None:
+    p = ASSETS_DIR / HEADER_LOGO
+    try:
+        if p.exists() and p.stat().st_size > 0:
+            return p
+    except OSError:
+        pass
+    return find_logo_file()
+
+
+def logo_data_uri() -> str | None:
+    p = _header_logo_file()
+    if p is None:
+        return None
+    key = (str(p), p.stat().st_mtime)
+    if key not in _LOGO_URI_CACHE:
         mime = LOGO_MIME.get(p.suffix.lower(), "image/png")
         data = base64.b64encode(p.read_bytes()).decode("ascii")
-        return f"data:{mime};base64,{data}"
-    data = base64.b64encode(FALLBACK_LOGO_SVG.encode("utf-8")).decode("ascii")
-    return f"data:image/svg+xml;base64,{data}"
+        _LOGO_URI_CACHE.clear()
+        _LOGO_URI_CACHE[key] = f"data:{mime};base64,{data}"
+    return _LOGO_URI_CACHE[key]
 
 
 CHANG_PRIMARY = gr.themes.Color(
@@ -107,13 +99,13 @@ CHANG_CSS = """
   --chang-gold: #FDB913;
   --chang-line: #F3E0C7;
 }
-.gradio-container { max-width: 1500px !important; padding: 8px 18px 6px !important; }
+.gradio-container { max-width: 1560px !important; padding: 6px 16px 4px !important; }
 footer { display: none !important; }
 
 /* ---- header ---- */
 #chang-topbar { align-items: center; margin-bottom: 2px; }
-.chang-header { display: flex; align-items: center; gap: 14px; padding: 2px 0; }
-.chang-logo { height: 48px; width: auto; }
+.chang-header { display: flex; align-items: center; gap: 12px; padding: 2px 0; }
+.chang-logo { height: 44px; width: auto; }
 .chang-row { display: flex; align-items: baseline; gap: 10px; }
 .chang-name {
   font-size: 1.35rem; font-weight: 800; line-height: 1.1;
@@ -151,17 +143,27 @@ footer { display: none !important; }
 .status-warn { color: #B3261E; font-weight: 700; }
 
 /* ---- compact blocks ---- */
-.block, .form { padding-top: 4px !important; padding-bottom: 4px !important; }
-.gap { gap: 6px !important; }
-.gr-group, .styler { padding: 6px 8px !important; }
+.block, .form { padding-top: 2px !important; padding-bottom: 2px !important; }
+.gap { gap: 4px !important; }
+.gr-group, .styler { padding: 4px 8px !important; }
 .section-head p {
-  font-size: 0.8rem !important; margin: 0 !important; letter-spacing: 0.04em;
+  font-size: 0.78rem !important; margin: 0 !important; letter-spacing: 0.04em;
   text-transform: uppercase; color: var(--chang-orange) !important;
 }
 .section-head strong { color: var(--chang-red); }
 span[data-testid="block-info"], label span { font-size: 0.78rem !important; }
 .wrap.default { min-height: 0 !important; }
 .hint-text p { font-size: 0.75rem !important; color: #a58969 !important; margin: 0 0 4px !important; }
+
+/* ---- compact radio pills (all radio groups except the language pill) ---- */
+label[data-testid$="-radio-label"] {
+  padding: 2px 10px !important; font-size: 0.8rem !important;
+}
+fieldset.block { gap: 2px !important; }
+
+/* ---- audio players: shrink the empty placeholder ---- */
+#tts-audio .empty, #lib-audio .empty { min-height: 56px !important; }
+#tts-audio, #lib-audio { min-height: 0 !important; }
 
 /* ---- tabs ---- */
 .tab-nav button, button.tab-item { font-weight: 600 !important; }
@@ -195,9 +197,11 @@ TAGLINES = {
 
 def header_html(lang: str) -> str:
     tagline = TAGLINES.get(lang, TAGLINES["en"])
+    uri = logo_data_uri()
+    logo_img = f'<img class="chang-logo" src="{uri}" alt="Chang 日日向上"/>' if uri else ""
     return f"""
 <div class="chang-header">
-  <img class="chang-logo" src="{logo_data_uri()}" alt="Chang 日日向上"/>
+  {logo_img}
   <div class="chang-title">
     <div class="chang-row"><span class="chang-name">Chang</span><span class="chang-cjk">日日向上</span></div>
     <div class="chang-tagline">{tagline}</div>

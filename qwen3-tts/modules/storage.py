@@ -149,7 +149,7 @@ def build_settings_tab():
         with gr.Column(scale=1):
             with gr.Group():
                 gr.Markdown("**Behaviour**", elem_classes="section-head")
-                in_default_tts = gr.Dropdown(
+                in_default_tts = gr.Radio(
                     choices=["Fast — Qwen3-TTS 0.6B", "Higher Quality — Qwen3-TTS 1.7B"],
                     value=s["default_tts_model"], label="Default TTS model",
                 )
