@@ -607,6 +607,7 @@ def process_word(pid: str, cfg: dict, item: dict, queue_pos: int, total: int,
     result["errors"] = errors
     result["warnings"] = warnings
     result["model_calls"] = model_calls
+    gp.save_raw(pid, word, result.get("prompt", ""), raw)
 
     if obj is not None and not errors:
         meta = {
@@ -868,6 +869,16 @@ class QueueRunner:
                     self.state["seconds_per_word"] = (
                         self.state["seconds_per_word"][-19:] + [secs])
                     self.state["current_started"] = None
+                    self.state["last_outcome"] = {
+                        "word": item["hanzi"],
+                        "status": item_after["status"],
+                        "errors": outcome.get("errors", [])[:8],
+                        "warnings": outcome.get("warnings", [])[:8],
+                        "notes": outcome.get("notes", [])[:8],
+                        "object": outcome.get("object"),
+                        "evidence": (outcome.get("evidence") or [])[:12],
+                        "seconds": secs,
+                    }
                 gp.log(pid, f"word_{item_after['status']}",
                        f"{item['hanzi']}: {item_after['status']} in {secs:.1f}s"
                        + (f" — {item_after.get('error')}" if item_after.get("error") else ""))

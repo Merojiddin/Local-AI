@@ -617,6 +617,25 @@ def read_log_tail(pid: str, n: int = 40) -> list[dict]:
     return read_jsonl(_pfile(pid, "logs") / "generation_log.jsonl")[-n:]
 
 
+def save_raw(pid: str, word: str, prompt: str, raw: str) -> None:
+    """Keep the exact final prompt and raw model response for the review panel."""
+    d = _pfile(pid, "logs") / "raw"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{sanitize_filename(word)}.txt").write_text(
+        "=== FINAL PROMPT ===\n" + (prompt or "") +
+        "\n\n=== RAW MODEL RESPONSE ===\n" + (raw or ""),
+        encoding="utf-8",
+    )
+
+
+def load_raw(pid: str, word: str) -> str:
+    p = _pfile(pid, "logs") / "raw" / f"{sanitize_filename(word)}.txt"
+    try:
+        return p.read_text(encoding="utf-8")
+    except OSError:
+        return "(no raw response recorded for this word)"
+
+
 def save_progress(pid: str, progress: dict) -> None:
     progress["saved"] = datetime.now().isoformat(timespec="seconds")
     atomic_write_json(_pfile(pid, "progress.json"), progress)

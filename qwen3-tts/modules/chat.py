@@ -192,7 +192,7 @@ def build_chat_tab(settings: dict):
                     label="System instruction", value=DEFAULT_SYSTEM, lines=2,
                 )
                 temperature = gr.Slider(0.0, 1.5, value=0.7, step=0.05, label="Temperature")
-                max_tokens = gr.Slider(64, 4096, value=1024, step=64, label="Maximum output length (tokens)")
+                max_tokens = gr.Slider(256, 16384, value=1024, step=64, label="Maximum output length (tokens)")
             with gr.Accordion("Files & project context", open=False, visible=show_adv):
                 files = gr.File(
                     label="Attach text/code files", file_count="multiple",

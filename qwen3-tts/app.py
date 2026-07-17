@@ -51,7 +51,7 @@ except ImportError:
         "MLX-Audio only works on Apple Silicon Macs (M1/M2/M3/M4)."
     )
 
-from modules import branding, chat, documents, memory_manager as mm
+from modules import branding, chat, documents, generator_tab, memory_manager as mm
 from modules import model_manager as mgr
 from modules import ocr, storage, transcription, tts, vision
 
@@ -117,6 +117,8 @@ def build_ui() -> "gr.Blocks":
             ocr.build_ocr_tab(settings)
         with gr.Tab("📚 Documents"):
             documents.build_documents_tab(settings)
+        with gr.Tab("🏗 Generator"):
+            generator_tab.build_generator_tab(settings)
         with gr.Tab("📦 Models"):
             mgr.build_models_tab()
         with gr.Tab("⚙️ Settings"):
