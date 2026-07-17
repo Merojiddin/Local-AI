@@ -18,6 +18,7 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import sys
 
 
@@ -186,7 +187,7 @@ if __name__ == "__main__":
     build_ui().launch(
         server_name="127.0.0.1",
         server_port=7860,
-        inbrowser=True,
+        inbrowser=os.environ.get("QWEN3_TTS_NO_BROWSER") != "1",
         show_error=True,
         favicon_path=str(logo_file) if logo_file else None,
     )
