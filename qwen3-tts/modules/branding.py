@@ -197,6 +197,62 @@ fieldset.block { gap: 2px !important; }
 .lib-row.playing .lib-name { color: var(--chang-red); font-weight: 700; }
 .lib-empty { padding: 10px; color: #a58969; }
 
+/* ---- model selector cards (shared by every AI category) ---- */
+.ms-holder { padding: 0 !important; }
+.ms-section { margin: 2px 0 6px; }
+.ms-title {
+  font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--chang-orange); margin-bottom: 3px;
+}
+.ms-chip {
+  display: inline-block; font-size: 0.68rem; font-weight: 600; color: #7A5C3E;
+  background: #FFF3E0; border: 1px solid var(--chang-line);
+  border-radius: 999px; padding: 1px 9px; margin-bottom: 5px;
+}
+.ms-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.ms-card {
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+  background: #fff; border: 1px solid var(--chang-line); border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(232, 106, 18, 0.08);
+  cursor: pointer; user-select: none; font-size: 0.8rem; color: #43301C;
+  transition: box-shadow 0.12s, border-color 0.12s;
+}
+.ms-card:hover { border-color: var(--chang-orange); box-shadow: 0 2px 6px rgba(232, 106, 18, 0.16); }
+.ms-card.selected {
+  background: linear-gradient(90deg, var(--chang-red), var(--chang-orange) 60%, var(--chang-gold));
+  border-color: transparent; color: #fff;
+  box-shadow: 0 2px 6px rgba(232, 106, 18, 0.28);
+}
+.ms-card.disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+.ms-radio {
+  width: 14px; height: 14px; min-width: 14px; display: inline-block;
+  border: 2px solid #C9AE8C; border-radius: 50%; background: #fff; position: relative;
+}
+.ms-card.selected .ms-radio { border-color: #fff; background: transparent; }
+.ms-card.selected .ms-radio::after {
+  content: ""; position: absolute; inset: 2px; border-radius: 50%; background: #fff;
+}
+.ms-text { display: flex; flex-direction: column; line-height: 1.25; }
+.ms-name { font-weight: 600; }
+.ms-ram { font-size: 0.68rem; color: #a58969; }
+.ms-card.selected .ms-ram { color: rgba(255, 255, 255, 0.88); }
+.ms-tag {
+  font-size: 0.64rem; font-weight: 700; border-radius: 999px;
+  padding: 1px 7px; white-space: nowrap;
+}
+.ms-tag.ok { background: #E8F5E9; color: #2E7D32; }
+.ms-tag.miss { background: #F5F0EA; color: #8a7660; }
+.ms-tag.rec { background: #FFF3D6; color: #A05A00; border: 1px solid #FDB913; }
+.ms-tag.mem { background: #FDECEA; color: #B3261E; }
+.ms-card.selected .ms-tag { border-color: transparent; }
+.ms-dl {
+  border: 1px solid var(--chang-line); background: #FFFDF8; border-radius: 8px;
+  padding: 1px 8px; cursor: pointer; font-size: 0.72rem; color: #43301C;
+}
+.ms-dl:hover { background: #FFF3E0; border-color: var(--chang-orange); }
+.ms-hint { font-size: 0.7rem; color: #a58969; margin-top: 3px; }
+#model-evt { display: none !important; }
+
 /* ---- tabs ---- */
 .tab-nav button, button.tab-item { font-weight: 600 !important; }
 .tab-nav button.selected, button.selected.tab-item {
@@ -234,6 +290,21 @@ window.changLibEvt = (action, btn) => {
   const box = document.querySelector('#lib-evt textarea');
   if (!row || !box) return;
   box.value = JSON.stringify({action: action, name: row.dataset.name, t: Date.now()});
+  box.dispatchEvent(new Event('input', {bubbles: true}));
+};
+window.changModelPick = (el) => {
+  if (el.classList.contains('disabled') || el.classList.contains('selected')) return;
+  const box = document.querySelector('#model-evt textarea');
+  if (!box) return;
+  box.value = JSON.stringify({action: 'select', cat: el.dataset.cat, value: el.dataset.value, t: Date.now()});
+  box.dispatchEvent(new Event('input', {bubbles: true}));
+};
+window.changModelInstall = (ev, btn) => {
+  ev.stopPropagation();
+  const box = document.querySelector('#model-evt textarea');
+  if (!box) return;
+  btn.textContent = '⏳';
+  box.value = JSON.stringify({action: 'install', model: btn.dataset.model, t: Date.now()});
   box.dispatchEvent(new Event('input', {bubbles: true}));
 };
 </script>

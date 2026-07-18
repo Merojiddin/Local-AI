@@ -285,14 +285,40 @@ def test_real_queue():
     print("  " + json.dumps(results[0], ensure_ascii=False)[:300])
 
 
+def _pin_installed_chat_model() -> None:
+    """Part 2 needs real weights: pin the chat selection to an installed model."""
+    from modules import model_manager as mgr
+    from modules import model_select as ms
+
+    key = ms.selected_key("chat")
+    if mgr.is_installed(key):
+        return
+    fallback = next(
+        (o["value"] for o in ms.CATEGORIES["chat"]["options"]
+         if mgr.is_installed(o["value"])), None)
+    if fallback is None:
+        raise SystemExit("No chat model installed — install one in the Models tab first.")
+    settings = storage.load_settings()
+    settings["chat_model"] = fallback
+    storage.save_settings(settings)
+    print(f"  ({key} not installed — using {fallback} for the e2e run)")
+
+
 if __name__ == "__main__":
+    _settings_backup = storage.SETTINGS_FILE.read_text(encoding="utf-8") \
+        if storage.SETTINGS_FILE.exists() else None
     try:
+        # Even the stubbed queue consults the selected chat model (RAM safety
+        # margin) — pin an installed one so results don't depend on defaults.
+        _pin_installed_chat_model()
         print("[part 1 — stubbed model]")
         test_repair_and_failures_stubbed()
         print("[part 2 — real models]")
         build_test_collection()
         test_real_queue()
     finally:
+        if _settings_backup is not None:
+            storage.SETTINGS_FILE.write_text(_settings_backup, encoding="utf-8")
         shutil.rmtree(_TMP, ignore_errors=True)
     print()
     if FAILURES:

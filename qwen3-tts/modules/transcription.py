@@ -1,5 +1,7 @@
-"""Speech-to-text — Whisper large-v3-turbo via the STT engine already bundled
-with MLX-Audio. Accepts WAV/MP3/M4A/MP4 (decoded locally with FFmpeg).
+"""Speech-to-text — Whisper via the STT engine already bundled with
+MLX-Audio. The model (large-v3-turbo or large-v3) comes from the
+speech-to-text selector. Accepts WAV/MP3/M4A/MP4 (decoded locally with
+FFmpeg).
 """
 
 from __future__ import annotations
@@ -11,9 +13,8 @@ import gradio as gr
 
 from . import memory_manager as mm
 from . import model_manager as mgr
+from . import model_select as ms
 from . import storage
-
-MODEL_KEY = "whisper"
 
 LANG_OPTIONS = [
     ("Auto-detect", "auto"),
@@ -33,9 +34,11 @@ def _load():
     import mlx_audio.stt.models  # noqa: F401
     from mlx_audio.stt.models.whisper import Model
 
-    path = mgr.model_path_or_error(MODEL_KEY)
+    key = ms.selected_key("stt")
+    path = mgr.model_path_or_error(key)
+    name = mgr.MODELS[key]["name"]
     return mm.HEAVY.get(
-        "whisper", "Whisper large-v3-turbo",
+        f"whisper:{key}", name,
         lambda: Model.from_pretrained(path),
     )
 
@@ -129,6 +132,7 @@ def transcribe(audio_file, language, task, timestamps):
 def build_transcribe_tab(settings: dict):
     with gr.Row(equal_height=False):
         with gr.Column(scale=5):
+            ms.build_selector("stt")
             audio_file = gr.File(
                 label="Audio / video file (WAV, MP3, M4A, MP4)",
                 file_types=[".wav", ".mp3", ".m4a", ".mp4"],

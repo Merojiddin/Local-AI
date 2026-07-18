@@ -1,6 +1,7 @@
-"""Image & homework analysis — Qwen3-VL 4B (4-bit) via MLX-VLM.
+"""Image & homework analysis — Qwen3-VL (4-bit) via MLX-VLM.
 
-Accepts PNG/JPG images or one page of a PDF (rendered locally with pypdfium2).
+The model size (4B or 8B) comes from the Vision selector. Accepts PNG/JPG
+images or one page of a PDF (rendered locally with pypdfium2).
 """
 
 from __future__ import annotations
@@ -12,9 +13,8 @@ import gradio as gr
 
 from . import memory_manager as mm
 from . import model_manager as mgr
+from . import model_select as ms
 from . import storage
-
-MODEL_KEY = "vision-4b"
 
 PROMPT_PRESETS = [
     "Extract the Chinese text",
@@ -26,8 +26,38 @@ PROMPT_PRESETS = [
 
 def _load():
     from mlx_vlm import load
-    path = mgr.model_path_or_error(MODEL_KEY)
-    return mm.HEAVY.get("vision", "Qwen3-VL 4B", lambda: load(path))
+    key = ms.selected_key("vision")
+    path = mgr.model_path_or_error(key)
+    name = mgr.MODELS[key]["name"]
+    return mm.HEAVY.get(f"vision:{key}", name, lambda: load(path))
+
+
+def _generate(model, processor, prompt: str, image_path: str,
+              max_tokens: int, temperature: float) -> str:
+    from mlx_vlm import generate
+    from mlx_vlm.prompt_utils import apply_chat_template
+
+    config = getattr(model, "config", None)
+    formatted = apply_chat_template(processor, config, prompt, num_images=1)
+    result = generate(
+        model, processor, formatted, image=[image_path],
+        max_tokens=int(max_tokens), temperature=float(temperature),
+        verbose=False,
+    )
+    return (getattr(result, "text", None) or str(result)).strip()
+
+
+OCR_PROMPT = (
+    "Extract ALL text visible in this image exactly as written, preserving "
+    "the original line breaks and reading order. Output only the extracted "
+    "text — no commentary, no translation."
+)
+
+
+def extract_text(image_path: str, max_tokens: int = 2048) -> str:
+    """OCR one image with the selected vision model (used by the OCR tab)."""
+    model, processor = _load()
+    return _generate(model, processor, OCR_PROMPT, image_path, max_tokens, 0.0)
 
 
 def render_pdf_page(pdf_path: str, page_number: int) -> str:
@@ -72,23 +102,13 @@ def analyze(image_path, pdf_file, pdf_page, preset, custom_prompt, max_tokens, t
 
     mm.set_task("Vision: analyzing image…")
     try:
-        from mlx_vlm import generate
-        from mlx_vlm.prompt_utils import apply_chat_template
-
-        config = getattr(model, "config", None)
-        formatted = apply_chat_template(processor, config, prompt, num_images=1)
-        result = generate(
-            model, processor, formatted, image=[img],
-            max_tokens=int(max_tokens), temperature=float(temperature),
-            verbose=False,
-        )
-        text = getattr(result, "text", None) or str(result)
+        text = _generate(model, processor, prompt, img, max_tokens, temperature)
     except Exception as exc:  # noqa: BLE001
         raise gr.Error(f"Analysis failed: {exc}")
     finally:
         mm.HEAVY.touch()
         mm.set_task("idle")
-    return text.strip()
+    return text
 
 
 def build_vision_tab(settings: dict):
@@ -100,6 +120,7 @@ def build_vision_tab(settings: dict):
                 pdf = gr.File(label="PDF", file_types=[".pdf"], type="filepath", height=90)
                 pdf_page = gr.Number(value=1, precision=0, minimum=1, label="Page number")
         with gr.Column(scale=6):
+            ms.build_selector("vision")
             preset = gr.Dropdown(
                 choices=PROMPT_PRESETS, value=PROMPT_PRESETS[0],
                 label="Task",

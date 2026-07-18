@@ -53,6 +53,7 @@ except ImportError:
 
 from modules import branding, chat, documents, generator_tab, memory_manager as mm
 from modules import model_manager as mgr
+from modules import model_select
 from modules import ocr, storage, transcription, tts, vision
 
 
@@ -124,6 +125,9 @@ def build_ui() -> "gr.Blocks":
         with gr.Tab("⚙️ Settings"):
             storage.build_settings_tab()
 
+        # ---- Shared event bridge for the model selector cards ----
+        model_select.attach_bridge()
+
         # ---- Status refresh + idle auto-unload ----
         timer = gr.Timer(4)
 
@@ -133,9 +137,12 @@ def build_ui() -> "gr.Blocks":
                 bool(s.get("auto_unload", True)),
                 float(s.get("auto_unload_minutes", 10)),
             )
-            return status_html()
+            # Selector cards piggyback on the same tick so install/remove
+            # state stays fresh; unchanged selectors return a no-op update.
+            return [status_html(), *model_select.refresh_updates()]
 
-        timer.tick(on_tick, outputs=[status], show_progress="hidden")
+        timer.tick(on_tick, outputs=[status, *model_select.components()],
+                   show_progress="hidden")
 
         def on_unload():
             mm.unload_all()

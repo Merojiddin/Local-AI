@@ -4,7 +4,7 @@ Pipeline per word (one word at a time — this Mac has 16 GB unified memory):
 
   queued word -> retrieval from the project's collections (evidence grouped by
   field, provenance kept) -> context-budget check (evidence is trimmed before
-  the output-token allowance) -> Qwen3 4B via mlx-lm -> JSON extraction ->
+  the output-token allowance) -> the selected chat model via mlx-lm -> JSON extraction ->
   deterministic repair -> validation -> model repair with exact errors ->
   full regenerate -> results.json append (atomic) / failures.json.
 
@@ -29,7 +29,10 @@ from . import memory_manager as mm
 from . import model_manager as mgr
 from .safe_json import extract_and_parse, infer_schema_from_example, validate_schema
 
-CHAT_KEY = "chat-4b"
+def chat_key() -> str:
+    """The registry key of the currently selected chat model."""
+    from . import model_select
+    return model_select.selected_key("chat")
 
 # Output-token policy (spec: min 256, max 16384, default 8192)
 MIN_OUTPUT_TOKENS = 256
@@ -52,30 +55,36 @@ _SOURCE_LABEL_RE = re.compile(r"\[S(\d+)\]")
 # Tokens & context budget
 # --------------------------------------------------------------------------- #
 _tokenizer = None
+_tokenizer_key = None
 _model_max_ctx = None
+_model_max_ctx_key = None
 
 
 def _get_tokenizer():
     """Tokenizer only (a few MB) — no model weights are loaded for counting."""
-    global _tokenizer
-    if _tokenizer is None:
+    global _tokenizer, _tokenizer_key
+    key = chat_key()
+    if _tokenizer is None or _tokenizer_key != key:
         from mlx_lm.utils import load_tokenizer
-        _tokenizer = load_tokenizer(Path(mgr.model_path_or_error(CHAT_KEY)))
+        _tokenizer = load_tokenizer(Path(mgr.model_path_or_error(key)))
+        _tokenizer_key = key
     return _tokenizer
 
 
 def model_max_context() -> int:
     """The installed model's real context window (from its config.json)."""
-    global _model_max_ctx
-    if _model_max_ctx is None:
+    global _model_max_ctx, _model_max_ctx_key
+    key = chat_key()
+    if _model_max_ctx is None or _model_max_ctx_key != key:
         try:
             cfg = json.loads(
-                (Path(mgr.model_path_or_error(CHAT_KEY)) / "config.json")
+                (Path(mgr.model_path_or_error(key)) / "config.json")
                 .read_text(encoding="utf-8")
             )
             _model_max_ctx = int(cfg.get("max_position_embeddings", 32768))
         except Exception:  # noqa: BLE001
             _model_max_ctx = 32768
+        _model_max_ctx_key = key
     return _model_max_ctx
 
 
@@ -458,8 +467,9 @@ def _walk_dicts(node, path="$"):
 # --------------------------------------------------------------------------- #
 def _load_chat():
     from mlx_lm import load
-    path = mgr.model_path_or_error(CHAT_KEY)
-    return mm.HEAVY.get("chat", "Qwen3 4B", lambda: load(path))
+    key = chat_key()
+    path = mgr.model_path_or_error(key)
+    return mm.HEAVY.get(f"chat:{key}", mgr.MODELS[key]["name"], lambda: load(path))
 
 
 def generate_text(system: str, user: str, cfg: dict,
@@ -611,7 +621,7 @@ def process_word(pid: str, cfg: dict, item: dict, queue_pos: int, total: int,
 
     if obj is not None and not errors:
         meta = {
-            "generated_by_model": mgr.MODELS[CHAT_KEY]["repo"],
+            "generated_by_model": mgr.MODELS[chat_key()]["repo"],
             "prompt_version": cfg.get("prompt_version", 1),
             "source_collection_ids": sorted({c["collection"] for c in result["evidence"]})
             if result.get("evidence") else [],
@@ -790,7 +800,7 @@ class QueueRunner:
 
     def _run(self, pid: str, only_ids, only_statuses) -> None:
         cfg = gp.get_config(pid)
-        gp.log(pid, "queue_start", f"queue started (model {mgr.MODELS[CHAT_KEY]['name']})")
+        gp.log(pid, "queue_start", f"queue started (model {mgr.MODELS[chat_key()]['name']})")
         completed_words: list[str] = []
         try:
             while True:
@@ -810,8 +820,9 @@ class QueueRunner:
                     gp.log(pid, "queue_resume", "resumed")
 
                 # memory safety: pause instead of crashing
-                need = mgr.MODELS[CHAT_KEY].get("ram_gb", 4.0)
-                if mm.HEAVY.key != "chat":
+                key = chat_key()
+                need = mgr.MODELS[key].get("ram_gb", 4.0)
+                if mm.HEAVY.key != f"chat:{key}":
                     warn = mm.memory_warning(threshold_gb=15.0, need_gb=need)
                     if warn:
                         with self._lock:

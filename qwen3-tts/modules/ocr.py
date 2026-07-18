@@ -1,8 +1,10 @@
-"""OCR — Apple's built-in Vision framework (VNRecognizeTextRequest).
+"""OCR — Apple's built-in Vision framework (VNRecognizeTextRequest), or
+AI-assisted OCR with the selected Qwen3-VL vision model.
 
-Chosen instead of PaddleOCR: it is already on every Mac (no download, no extra
-venv), is fast on Apple Silicon, and natively recognises Chinese, English and
-Vietnamese. Accepts images and PDFs (pages rendered locally with pypdfium2).
+Apple Vision is the default: it is already on every Mac (no download, no
+extra venv), is fast on Apple Silicon, and natively recognises Chinese,
+English and Vietnamese. The AI-assisted engine is slower but handles messy
+layouts. Accepts images and PDFs (pages rendered locally with pypdfium2).
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from pathlib import Path
 import gradio as gr
 
 from . import memory_manager as mm
+from . import model_select as ms
 from . import storage
 
 LANG_CHOICES = [
@@ -97,21 +100,35 @@ def run_ocr(file_path, languages, progress=gr.Progress()):
         raise gr.Error("Upload an image (PNG/JPG) or a PDF first.")
     path = Path(file_path)
 
-    mm.set_task("OCR: recognizing text…")
+    engine = ms.selected_key("ocr")
+    if engine == "qwen-vl":
+        from . import vision
+
+        def _read(img: str) -> str:
+            return vision.extract_text(img)
+        task = "OCR: reading with Qwen3-VL…"
+    else:
+        def _read(img: str) -> str:
+            return ocr_image(img, languages)
+        task = "OCR: recognizing text…"
+
+    mm.set_task(task)
     try:
         if path.suffix.lower() == ".pdf":
             pages = _pdf_page_images(str(path))
             parts = []
             for i, img in enumerate(pages):
                 progress((i + 1) / len(pages), desc=f"Page {i + 1} / {len(pages)}")
-                text = ocr_image(img, languages)
+                text = _read(img)
                 parts.append(f"--- Page {i + 1} ---\n{text}" if len(pages) > 1 else text)
             text = "\n\n".join(parts)
         else:
-            text = ocr_image(str(path), languages)
+            text = _read(str(path))
     except Exception as exc:  # noqa: BLE001
         raise gr.Error(f"OCR failed: {exc}")
     finally:
+        if engine == "qwen-vl":
+            mm.HEAVY.touch()
         mm.set_task("idle")
 
     if not text.strip():
@@ -126,19 +143,16 @@ def run_ocr(file_path, languages, progress=gr.Progress()):
 def build_ocr_tab(settings: dict):
     with gr.Row(equal_height=False):
         with gr.Column(scale=5):
+            ms.build_selector("ocr")
             file_in = gr.File(
                 label="Image or PDF", file_types=[".png", ".jpg", ".jpeg", ".webp", ".tiff", ".pdf"],
                 type="filepath", height=110,
             )
             languages = gr.CheckboxGroup(
                 choices=LANG_CHOICES, value=["zh-Hans", "en-US", "vi"],
-                label="Languages (priority order)",
+                label="Languages (priority order — Apple Vision engine only)",
             )
             go_btn = gr.Button("🔎 Extract text", variant="primary")
-            gr.Markdown(
-                "Uses the OCR engine built into macOS — no model download needed.",
-                elem_classes="hint-text",
-            )
         with gr.Column(scale=6):
             result = gr.Textbox(
                 label="Extracted text", lines=14, max_lines=20, show_copy_button=True,

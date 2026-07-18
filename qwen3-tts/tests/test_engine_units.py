@@ -50,7 +50,21 @@ def test_queries():
 
 
 def test_tokens_and_budget():
-    check("model max context read", ge.model_max_context() == 262144,
+    # The generator follows the selected chat model; when its weights are
+    # installed the context comes from its config.json, otherwise the
+    # conservative 32768 fallback is used.
+    from modules import model_manager as mgr
+
+    key = ge.chat_key()
+    if mgr.is_installed(key):
+        import json as _json
+        from pathlib import Path as _Path
+        cfg = _json.loads((_Path(mgr.model_path_or_error(key)) / "config.json")
+                          .read_text(encoding="utf-8"))
+        expected = int(cfg.get("max_position_embeddings", 32768))
+    else:
+        expected = 32768
+    check("model max context read", ge.model_max_context() == expected,
           ge.model_max_context())
     n = ge.count_tokens("爱 means to love — yêu")
     check("token counting works", 3 <= n <= 30, n)

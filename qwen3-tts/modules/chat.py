@@ -1,4 +1,8 @@
-"""Chat & coding assistant — Qwen3 4B (4-bit) via MLX-LM.
+"""Chat & coding assistant via MLX-LM.
+
+The model comes from the selectors saved in Settings: plain questions use the
+chat model, questions with attached files or a project folder use the coding
+model (see modules/model_select.py).
 
 Project-folder questions use keyword retrieval: only the handful of most
 relevant files are sent to the model. The model never reads a whole
@@ -14,8 +18,7 @@ import gradio as gr
 
 from . import memory_manager as mm
 from . import model_manager as mgr
-
-MODEL_KEY = "chat-4b"
+from . import model_select as ms
 
 TEXT_EXTS = {
     ".py", ".js", ".ts", ".jsx", ".tsx", ".json", ".yaml", ".yml", ".toml",
@@ -35,10 +38,11 @@ UPLOAD_CHARS = 8_000           # clip each uploaded file
 DEFAULT_SYSTEM = "You are a helpful assistant for writing, coding and Chinese-language teaching."
 
 
-def _load():
+def _load(key: str):
     from mlx_lm import load
-    path = mgr.model_path_or_error(MODEL_KEY)
-    return mm.HEAVY.get("chat", "Qwen3 4B", lambda: load(path))
+    path = mgr.model_path_or_error(key)
+    name = mgr.MODELS[key]["name"]
+    return mm.HEAVY.get(f"chat:{key}", name, lambda: load(path))
 
 
 def _read_clipped(path: Path, limit: int) -> str:
@@ -131,8 +135,12 @@ def chat_fn(message, history, system_prompt, temperature, max_tokens, files, fol
     except ValueError as exc:
         raise gr.Error(str(exc))
 
+    # Coding/repository questions (attached files or a project folder) go to
+    # the coding model; everything else to the chat model.
+    coding = bool(files) or bool((folder or "").strip())
+    model_key = ms.selected_key("coding" if coding else "chat")
     try:
-        model, tokenizer = _load()
+        model, tokenizer = _load(model_key)
     except RuntimeError as exc:
         raise gr.Error(str(exc))
     except Exception as exc:  # noqa: BLE001
@@ -174,7 +182,7 @@ def build_chat_tab(settings: dict):
     with gr.Row(equal_height=False):
         with gr.Column(scale=7):
             chatbot = gr.Chatbot(
-                type="messages", label="Qwen3 4B (local)", height=430,
+                type="messages", label="Local chat", height=430,
                 show_copy_button=True,
             )
             with gr.Row():
@@ -186,6 +194,8 @@ def build_chat_tab(settings: dict):
             with gr.Row():
                 clear_btn = gr.Button("🗑 Clear conversation", size="sm")
         with gr.Column(scale=4):
+            ms.build_selector("chat")
+            ms.build_selector("coding")
             with gr.Group():
                 gr.Markdown("**Settings**", elem_classes="section-head")
                 system_prompt = gr.Textbox(

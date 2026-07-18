@@ -25,6 +25,17 @@ DEFAULT_SETTINGS = {
     "collections_dir": "data/collections",
     "generator_dir": "data/generator_projects",
     "default_tts_model": "Higher Quality — Qwen3-TTS 1.7B",
+    # Per-category model selections (see modules/model_select.py). Values are
+    # registry keys from models.json; unknown values fall back to these
+    # defaults when read.
+    "chat_model": "chat-8b",
+    "coding_model": "kiwi-8b",
+    "vision_model": "vision-4b",
+    "embed_model": "embed-0.6b",
+    "rerank_model": "rerank-0.6b",
+    "stt_model": "whisper",
+    "tts_voice_mode": "CustomVoice",
+    "ocr_engine": "apple",
     "force_light_theme": True,
     "auto_unload": True,
     "auto_unload_minutes": 10,

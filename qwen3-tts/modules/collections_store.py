@@ -416,7 +416,7 @@ def rebuild_index(name: str, progress_cb=None) -> str:
         indexed=True,
         last_indexed=datetime.now().isoformat(timespec="seconds"),
         chunk_count=len(chunks),
-        embed_model=mgr.MODELS[documents.EMBED_KEY]["repo"],
+        embed_model=mgr.MODELS[documents.embed_key()]["repo"],
     )
     _save_meta(name, meta)
     return f"✅ Indexed '{name}': {len(chunks)} passages from {len(paths)} file(s)."
@@ -458,6 +458,11 @@ def search(
         vectors, chunks = _load_index(name)
         if vectors is None or not chunks:
             continue
+        if vectors.shape[1] != q_vecs.shape[1]:
+            raise ValueError(
+                f"Collection '{name}' was indexed with a different embedding "
+                "model. Re-index it, or switch the embedding model back."
+            )
         sims = np.asarray(vectors) @ q_vecs.T          # [N, Q]
         best = sims.max(axis=1)                        # max over expanded queries
         n_cand = min(len(chunks), max(top_k * 4, top_k) if use_rerank else top_k * 2)

@@ -4,21 +4,34 @@ One compact local AI app for Apple Silicon Macs — **everything runs on your
 Mac**: no cloud, no login, no database. Your text, audio and documents never
 leave your computer.
 
-| Tab | What it does | Model (installed separately) |
+| Tab | What it does | Model choices (Fast / Balanced / Higher quality) |
 |---|---|---|
-| 🎧 TTS | Chinese text-to-speech: word / phrase / sentence / paragraph modes, style instructions, batch + CSV, caching, WAV/MP3 | Qwen3-TTS 0.6B (≈1.8 GB) and/or 1.7B (≈2.9 GB) |
-| 💬 Chat | Chat & coding assistant, system prompt, temperature, file upload, project-folder questions | Qwen3 4B 4-bit (≈2.3 GB) |
-| 🖼 Vision | Image / homework / screenshot analysis, PDF pages | Qwen3-VL 4B 4-bit (≈3.2 GB) |
-| 🎙 Transcribe | Speech-to-text for WAV/MP3/M4A/MP4, zh/en/vi + auto-detect, translate-to-English, TXT/SRT export | Whisper large-v3-turbo (≈1.7 GB) |
-| 🔎 OCR | Text extraction (zh / en / vi) from images & PDFs | built into macOS — no download |
-| 📚 Documents | Index PDF/DOCX/TXT/MD files, semantic search, optional re-ranking & answers | Qwen3-Embedding 0.6B (≈0.4 GB), optional Reranker (≈0.4 GB) |
-| 🏗 Generator | Structured JSON generation (dictionaries, examples, quizzes …) from your own document collections: word queues, validation, repair, review, exports | Qwen3 4B + Embedding (Reranker optional) |
+| 🎧 TTS | Chinese text-to-speech: word / phrase / sentence / paragraph modes, style instructions, batch + CSV, caching, WAV/MP3; voice mode: built-in voices (CustomVoice) or voice cloning (Base) | Qwen3-TTS 0.6B (≈1.8 GB) / **1.7B** (≈2.9 GB) |
+| 💬 Chat | Chat & coding assistant, system prompt, temperature, file upload, project-folder questions | Chat: Qwen3 4B / **Qwen3 8B** / Qwen3 14B Q4 · Coding (used when files/folder attached): Qwen3 4B / **Kiwi 8B Q4** / Qwen3 14B Q4 |
+| 🖼 Vision | Image / homework / screenshot analysis, PDF pages | **Qwen3-VL 4B** / Qwen3-VL 8B Q4 |
+| 🎙 Transcribe | Speech-to-text for WAV/MP3/M4A/MP4, zh/en/vi + auto-detect, translate-to-English, TXT/SRT export | **Whisper large-v3-turbo** / large-v3 |
+| 🔎 OCR | Text extraction (zh / en / vi) from images & PDFs | **Apple Vision** (built-in) / AI-assisted (Qwen3-VL) |
+| 📚 Documents | Index PDF/DOCX/TXT/MD files, semantic search, optional re-ranking & answers | Embedding: **0.6B** / 4B · Reranker: **0.6B** / 4B |
+| 🏗 Generator | Structured JSON generation (dictionaries, examples, quizzes …) from your own document collections: word queues, validation, repair, review, exports | uses the selected chat + embedding models |
 | 📦 Models | Install / remove / verify models, presets, disk-space checks | — |
 | ⚙️ Settings | Folders (incl. external SSD for models), theme, auto-unload, cache cleaning | — |
 
-Only **one heavy model is in memory at a time** (safe for 16 GB Macs); the
-status bar shows the loaded model, RAM use and current task, plus an
-**Unload model** button.
+**Choosing models.** Every tab has a card-style selector (radio circle,
+Installed / Not installed / Recommended / High memory tags, estimated RAM,
+⬇ Get button for missing weights). Bold entries above are the defaults.
+Clicking a card only **saves** the choice — the model loads the next time the
+feature is used. Selections persist in `settings.json` across restarts; if a
+selected model is removed, the category falls back to its default.
+
+Only **one heavy model is in memory at a time** — loading a heavy model
+always unloads the previous one first, so Qwen3 14B, Qwen3-VL 8B and Kiwi 8B
+can never be resident together (safe for 16 GB Macs). The status bar shows
+the loaded model, RAM use and current task, plus an **Unload model** button.
+
+**Kiwi 8B Q4 and Qwen3-Reranker 4B** have no ready-made 4-bit MLX build on
+Hugging Face: installing them downloads the full-precision source
+(≈16.4 GB / ≈8.1 GB, one-time) and converts it locally to 4-bit with mlx-lm,
+then deletes the source from the Hugging Face cache.
 
 ## Requirements
 

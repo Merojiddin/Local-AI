@@ -30,6 +30,7 @@ import gradio as gr
 
 from . import memory_manager as mm
 from . import model_manager as mgr
+from . import model_select as ms
 from . import storage
 
 from mlx_audio.tts.generate import generate_audio
@@ -50,18 +51,38 @@ MODELS = {
     "Fast — Qwen3-TTS 0.6B": "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit",
     "Higher Quality — Qwen3-TTS 1.7B": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
 }
+# Base variants of the same sizes — used when Voice mode is "Clone a voice".
+BASE_MODELS = {
+    "Fast — Qwen3-TTS 0.6B": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit",
+    "Higher Quality — Qwen3-TTS 1.7B": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit",
+}
 DEFAULT_MODEL = "Higher Quality — Qwen3-TTS 1.7B"
 
 MODEL_SHORT = {
     MODELS["Fast — Qwen3-TTS 0.6B"]: "0.6B",
     MODELS["Higher Quality — Qwen3-TTS 1.7B"]: "1.7B",
+    BASE_MODELS["Fast — Qwen3-TTS 0.6B"]: "0.6B Base",
+    BASE_MODELS["Higher Quality — Qwen3-TTS 1.7B"]: "1.7B Base",
 }
 
 # Registry keys used by the Models tab / installer.
 REPO_TO_KEY = {
     MODELS["Fast — Qwen3-TTS 0.6B"]: "tts-0.6b",
     MODELS["Higher Quality — Qwen3-TTS 1.7B"]: "tts-1.7b",
+    BASE_MODELS["Fast — Qwen3-TTS 0.6B"]: "tts-0.6b-base",
+    BASE_MODELS["Higher Quality — Qwen3-TTS 1.7B"]: "tts-1.7b-base",
 }
+
+
+def voice_mode() -> str:
+    """'CustomVoice' (built-in voices) or 'Base' (voice cloning), validated."""
+    return ms.selected_key("tts_voice_mode")
+
+
+def active_repo(model_label: str) -> str:
+    """The repo for this size in the currently saved voice mode."""
+    table = BASE_MODELS if voice_mode() == "Base" else MODELS
+    return table[model_label]
 
 
 def resolve_model_source(repo: str) -> str:
@@ -501,7 +522,8 @@ def generate_one(
     if mode not in MODES:
         raise ValueError(f"Unknown mode: {mode}. Allowed: {', '.join(MODES)}")
 
-    repo = MODELS[model_label]
+    repo = active_repo(model_label)
+    cloning = voice_mode() == "Base"
     ext = "mp3" if str(out_format).upper() == "MP3" else "wav"
     kbps = QUALITY_KBPS.get(quality, 192)
     repeat = max(1, min(5, int(repeat)))
@@ -559,13 +581,16 @@ def generate_one(
             kwargs = dict(
                 text=text,
                 model=model,
-                voice=voice,
                 output_path=str(tdp),
                 file_prefix=prefix,
                 audio_format="wav",
                 join_audio=True,
                 verbose=False,
             )
+            # Base models have no named speakers — they use a reference voice
+            # (or their default timbre when none is given).
+            if not cloning:
+                kwargs["voice"] = voice
             if SUPPORTS_SPEED:
                 kwargs["speed"] = eff_speed
             if SUPPORTS_LANG:
@@ -1034,7 +1059,17 @@ def build_tts_tab(lang_component, settings: dict):
                     model_label = gr.Radio(
                         choices=model_choices(L0), value=default_model, label=tr(L0, "model")
                     )
+                    ms.build_selector("tts_voice_mode")
                     voice = gr.Radio(choices=VOICES, value=DEFAULT_VOICE, label=tr(L0, "voice"))
+
+                    def _persist_model(label: str) -> None:
+                        if label in MODELS:
+                            s = storage.load_settings()
+                            s["default_tts_model"] = label
+                            storage.save_settings(s)
+
+                    model_label.change(_persist_model, inputs=[model_label],
+                                       show_progress="hidden")
                     sec_out = gr.Markdown(tr(L0, "sec_out"), elem_classes="section-head")
                     with gr.Row():
                         out_format = gr.Radio(

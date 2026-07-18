@@ -1,8 +1,10 @@
-"""Document search — Qwen3-Embedding 0.6B (+ optional Qwen3-Reranker 0.6B).
+"""Document search — Qwen3-Embedding (+ optional Qwen3-Reranker).
 
 Upload PDF / DOCX / TXT / Markdown files, build a local semantic index, then
 ask questions over it. Indexes live in data/indexes/<name>/ — completely
-separate from model weights, so removing models never touches them.
+separate from model weights, so removing models never touches them. The
+embedding, reranker and answer models come from the selectors saved in
+Settings (modules/model_select.py).
 
 The embedding model is loaded through mlx-lm: Qwen3-Embedding is a standard
 Qwen3 tower whose sentence vector is the last-token hidden state, L2-normalised
@@ -22,11 +24,20 @@ import numpy as np
 
 from . import memory_manager as mm
 from . import model_manager as mgr
+from . import model_select as ms
 from . import storage
 
-EMBED_KEY = "embed-0.6b"
-RERANK_KEY = "rerank-0.6b"
-CHAT_KEY = "chat-4b"
+
+def embed_key() -> str:
+    return ms.selected_key("embedding")
+
+
+def rerank_key() -> str:
+    return ms.selected_key("reranker")
+
+
+def chat_key() -> str:
+    return ms.selected_key("chat")
 
 QUERY_INSTRUCT = "Given a search query, retrieve relevant passages that answer the query"
 CHUNK_CHARS = 700
@@ -40,14 +51,18 @@ MAX_EMBED_TOKENS = 1024
 # --------------------------------------------------------------------------- #
 def _load_embedder():
     from mlx_lm import load
-    path = mgr.model_path_or_error(EMBED_KEY)
-    return mm.LIGHT["embed"].get("embed", "Qwen3-Embedding 0.6B", lambda: load(path))
+    key = embed_key()
+    path = mgr.model_path_or_error(key)
+    name = mgr.MODELS[key]["name"]
+    return mm.LIGHT["embed"].get(f"embed:{key}", name, lambda: load(path))
 
 
 def _load_reranker():
     from mlx_lm import load
-    path = mgr.model_path_or_error(RERANK_KEY)
-    return mm.LIGHT["rerank"].get("rerank", "Qwen3-Reranker 0.6B", lambda: load(path))
+    key = rerank_key()
+    path = mgr.model_path_or_error(key)
+    name = mgr.MODELS[key]["name"]
+    return mm.LIGHT["rerank"].get(f"rerank:{key}", name, lambda: load(path))
 
 
 def embed_texts(texts: list[str], is_query: bool = False, progress_cb=None) -> np.ndarray:
@@ -204,7 +219,7 @@ def build_index(name: str, files: list[str], progress_cb=None) -> str:
                 "created": datetime.now().isoformat(timespec="seconds"),
                 "files": sorted({Path(f).name for f in files}),
                 "chunks": len(chunks),
-                "model": mgr.MODELS[EMBED_KEY]["repo"],
+                "model": mgr.MODELS[embed_key()]["repo"],
             },
             ensure_ascii=False, indent=2,
         ),
@@ -232,6 +247,12 @@ def search_index(name: str, query: str, top_k: int, use_rerank: bool):
     chunks = json.loads((target / "chunks.json").read_text(encoding="utf-8"))
 
     q = embed_texts([query], is_query=True)[0]
+    if vectors.shape[1] != q.shape[0]:
+        raise ValueError(
+            f"Index '{name}' was built with a different embedding model "
+            f"(vector size {vectors.shape[1]} vs {q.shape[0]}). Rebuild the "
+            "index, or switch the embedding model back."
+        )
     sims = vectors @ q
     n_candidates = min(len(chunks), max(top_k * 4, top_k) if use_rerank else top_k)
     order = np.argsort(-sims)[:n_candidates]
@@ -255,8 +276,10 @@ def answer_with_chat(query: str, passages: list[dict]) -> str:
     from mlx_lm import generate, load
     from mlx_lm.sample_utils import make_sampler
 
-    path = mgr.model_path_or_error(CHAT_KEY)
-    model, tokenizer = mm.HEAVY.get("chat", "Qwen3 4B", lambda: load(path))
+    key = chat_key()
+    path = mgr.model_path_or_error(key)
+    model, tokenizer = mm.HEAVY.get(f"chat:{key}", mgr.MODELS[key]["name"],
+                                    lambda: load(path))
     context = "\n\n".join(
         f"[{i + 1}] ({p['source']}) {p['text']}" for i, p in enumerate(passages)
     )
@@ -302,6 +325,8 @@ def build_documents_tab(settings: dict):
                 del_btn = gr.Button("🗑 Delete index", size="sm", variant="stop")
                 del_info = gr.Markdown(elem_classes="result-info")
         with gr.Column(scale=6):
+            ms.build_selector("embedding")
+            ms.build_selector("reranker")
             with gr.Group():
                 gr.Markdown("**Ask your documents**", elem_classes="section-head")
                 q_index = gr.Dropdown(choices=list_indexes(), label="Index")
@@ -310,10 +335,10 @@ def build_documents_tab(settings: dict):
                 with gr.Row():
                     top_k = gr.Slider(1, 10, value=4, step=1, label="Passages")
                     use_rerank = gr.Checkbox(
-                        value=False, label="Re-rank (needs Qwen3-Reranker)",
+                        value=False, label="Re-rank (uses the reranker model)",
                     )
                     use_llm = gr.Checkbox(
-                        value=False, label="Answer with chat model (needs Qwen3 4B)",
+                        value=False, label="Answer with the selected chat model",
                     )
                 search_btn = gr.Button("🔍 Search", variant="primary")
             answer_md = gr.Markdown(elem_classes="result-info")
