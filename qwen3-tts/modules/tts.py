@@ -46,6 +46,8 @@ _GEN_PARAMS = inspect.signature(generate_audio).parameters
 SUPPORTS_INSTRUCT = "instruct" in _GEN_PARAMS
 SUPPORTS_SPEED = "speed" in _GEN_PARAMS
 SUPPORTS_LANG = "lang_code" in _GEN_PARAMS
+SUPPORTS_REF = "ref_audio" in _GEN_PARAMS
+SUPPORTS_REF_TEXT = "ref_text" in _GEN_PARAMS
 
 MODELS = {
     "Fast — Qwen3-TTS 0.6B": "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit",
@@ -58,11 +60,21 @@ BASE_MODELS = {
 }
 DEFAULT_MODEL = "Higher Quality — Qwen3-TTS 1.7B"
 
+# Fish Audio S2 Pro — a multilingual, zero-shot voice-cloning model. Unlike the
+# Qwen sizes it has no named speakers and no CustomVoice/Base split: it clones
+# the timbre of a reference clip the user supplies, and emotion/prosody are
+# steered with inline [tag] markup in the text rather than a style instruction.
+# It is selected like a "size" in the Model radio but drives a different UI and
+# generation path (reference-audio upload instead of the named-voice picker).
+FISH_LABEL = "Voice Clone — Fish S2 Pro 4B"
+FISH_REPO = "mlx-community/fish-audio-s2-pro-8bit"
+
 MODEL_SHORT = {
     MODELS["Fast — Qwen3-TTS 0.6B"]: "0.6B",
     MODELS["Higher Quality — Qwen3-TTS 1.7B"]: "1.7B",
     BASE_MODELS["Fast — Qwen3-TTS 0.6B"]: "0.6B Base",
     BASE_MODELS["Higher Quality — Qwen3-TTS 1.7B"]: "1.7B Base",
+    FISH_REPO: "Fish S2 Pro",
 }
 
 # Registry keys used by the Models tab / installer.
@@ -71,6 +83,7 @@ REPO_TO_KEY = {
     MODELS["Higher Quality — Qwen3-TTS 1.7B"]: "tts-1.7b",
     BASE_MODELS["Fast — Qwen3-TTS 0.6B"]: "tts-0.6b-base",
     BASE_MODELS["Higher Quality — Qwen3-TTS 1.7B"]: "tts-1.7b-base",
+    FISH_REPO: "tts-fish-s2pro",
 }
 
 
@@ -79,8 +92,16 @@ def voice_mode() -> str:
     return ms.selected_key("tts_voice_mode")
 
 
+def is_fish(model_label: str) -> bool:
+    """True when the selected model is the Fish S2 Pro voice-cloning model."""
+    return model_label == FISH_LABEL
+
+
 def active_repo(model_label: str) -> str:
-    """The repo for this size in the currently saved voice mode."""
+    """The repo for this model. Fish has a single repo; the Qwen sizes depend on
+    the currently saved voice mode (CustomVoice vs Base)."""
+    if model_label == FISH_LABEL:
+        return FISH_REPO
     table = BASE_MODELS if voice_mode() == "Base" else MODELS
     return table[model_label]
 
@@ -173,6 +194,15 @@ T = {
         "model": "Model",
         "model_fast": "Fast — 0.6B",
         "model_hq": "Higher quality — 1.7B",
+        "model_clone": "Voice clone — Fish S2 Pro",
+        "ref_audio": "Reference voice clip (5–15s)",
+        "ref_text": "Reference transcript (optional)",
+        "ref_text_ph": "Type what is said in the reference clip — improves cloning",
+        "clone_note": (
+            "🎭 **Fish S2 Pro** clones the uploaded voice. Steer emotion with inline "
+            "tags in your text, e.g. `[happy]`, `[whisper]`, `[shout]`. Voice/style "
+            "presets above don't apply to this model."
+        ),
         "voice": "Voice",
         "sec_pron": "🔊 **Pronunciation**",
         "mode": "Reading mode",
@@ -240,6 +270,15 @@ T = {
         "model": "Mô hình",
         "model_fast": "Nhanh — 0.6B",
         "model_hq": "Chất lượng cao — 1.7B",
+        "model_clone": "Nhân bản giọng — Fish S2 Pro",
+        "ref_audio": "Mẫu giọng tham chiếu (5–15 giây)",
+        "ref_text": "Lời thoại của mẫu (tuỳ chọn)",
+        "ref_text_ph": "Nhập nội dung nói trong mẫu — giúp nhân bản chính xác hơn",
+        "clone_note": (
+            "🎭 **Fish S2 Pro** nhân bản giọng đã tải lên. Điều khiển cảm xúc bằng thẻ "
+            "trong văn bản, ví dụ `[happy]`, `[whisper]`, `[shout]`. Các thiết lập giọng/"
+            "phong cách ở trên không áp dụng cho mô hình này."
+        ),
         "voice": "Giọng đọc",
         "sec_pron": "🔊 **Phát âm**",
         "mode": "Chế độ đọc",
@@ -307,6 +346,14 @@ T = {
         "model": "模型",
         "model_fast": "快速 — 0.6B",
         "model_hq": "高质量 — 1.7B",
+        "model_clone": "声音克隆 — Fish S2 Pro",
+        "ref_audio": "参考声音片段（5–15 秒）",
+        "ref_text": "参考文本（可选）",
+        "ref_text_ph": "输入参考片段中所说的内容 — 可提升克隆效果",
+        "clone_note": (
+            "🎭 **Fish S2 Pro** 会克隆上传的声音。用文本中的标签控制情感，例如 "
+            "`[happy]`、`[whisper]`、`[shout]`。上方的声音/风格设置对该模型无效。"
+        ),
         "voice": "声音",
         "sec_pron": "🔊 **发音设置**",
         "mode": "朗读模式",
@@ -376,6 +423,7 @@ def model_choices(lang: str) -> list[tuple[str, str]]:
     return [
         (tr(lang, "model_fast"), "Fast — Qwen3-TTS 0.6B"),
         (tr(lang, "model_hq"), "Higher Quality — Qwen3-TTS 1.7B"),
+        (tr(lang, "model_clone"), FISH_LABEL),
     ]
 
 
@@ -493,6 +541,15 @@ def cache_hash(params: dict) -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+def file_digest(path: str) -> str:
+    """Content hash of a file (used to key the cache on the reference clip)."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(65536), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
 # --------------------------------------------------------------------------- #
 # Long-text chunking
 # --------------------------------------------------------------------------- #
@@ -569,21 +626,33 @@ def generate_one(
     repeat: int,
     out_format: str,
     quality: str,
+    ref_audio: str | None = None,
+    ref_text: str = "",
 ) -> dict:
     _require_ffmpeg()
+
+    fish = is_fish(model_label)
 
     text = (text or "").strip()
     if not text:
         raise ValueError("Please enter some Chinese text.")
-    if model_label not in MODELS:
+    if model_label not in MODELS and not fish:
         raise ValueError(f"Unknown model: {model_label}")
-    if voice not in VOICES:
+    if not fish and voice not in VOICES:
         raise ValueError(f"Unknown voice: {voice}. Allowed: {', '.join(VOICES)}")
     if mode not in MODES:
         raise ValueError(f"Unknown mode: {mode}. Allowed: {', '.join(MODES)}")
+    if fish and not ref_audio:
+        raise ValueError(
+            "Fish S2 Pro clones a voice from a reference clip — upload a short "
+            "(5–15 second) audio sample of the target voice first."
+        )
 
     repo = active_repo(model_label)
-    cloning = voice_mode() == "Base"
+    ref_text = (ref_text or "").strip()
+    # Fish clones from the reference clip; the Qwen Base voice mode relies on the
+    # model's own default timbre. Either way there is no named speaker to pass.
+    cloning = fish or voice_mode() == "Base"
     ext = "mp3" if str(out_format).upper() == "MP3" else "wav"
     kbps = QUALITY_KBPS.get(quality, 192)
     repeat = max(1, min(5, int(repeat)))
@@ -596,10 +665,10 @@ def generate_one(
     params = {
         "text": text,
         "repo": repo,
-        "voice": voice,
+        "voice": "clone" if fish else voice,
         "mode": mode,
         "speed": round(speed, 3),
-        "style": style,
+        "style": "" if fish else style,
         "p_before": round(p_before, 3),
         "p_after": round(p_after, 3),
         "p_between": round(p_between, 3),
@@ -607,6 +676,9 @@ def generate_one(
         "format": ext,
         "quality": kbps,
     }
+    if fish:
+        params["ref"] = file_digest(ref_audio)
+        params["ref_text"] = ref_text
     digest = cache_hash(params)
     cache_file = storage.cache_dir() / f"{digest}.{ext}"
 
@@ -627,7 +699,8 @@ def generate_one(
 
     cfg = MODE_CFG[mode]
     eff_speed = max(0.5, min(1.5, speed * cfg["speed_factor"]))
-    eff_instruct = style or cfg["instruct"]
+    # Fish is driven by inline [tags], not a Chinese style instruction.
+    eff_instruct = "" if fish else (style or cfg["instruct"])
     eff_before = max(p_before, cfg["min_pad"])
     eff_after = max(p_after, cfg["min_pad"])
 
@@ -645,15 +718,22 @@ def generate_one(
                 join_audio=True,
                 verbose=False,
             )
-            # Base models have no named speakers — they use a reference voice
-            # (or their default timbre when none is given).
-            if not cloning:
+            # Named speaker only for the Qwen CustomVoice models. Fish clones from
+            # the uploaded reference clip; the Qwen Base mode has no named speaker
+            # and falls back to its own default timbre.
+            if fish:
+                if SUPPORTS_REF and ref_audio:
+                    base_kwargs["ref_audio"] = ref_audio
+                if SUPPORTS_REF_TEXT and ref_text:
+                    base_kwargs["ref_text"] = ref_text
+            elif not cloning:
                 base_kwargs["voice"] = voice
             if SUPPORTS_SPEED:
                 base_kwargs["speed"] = eff_speed
-            if SUPPORTS_LANG:
+            # Qwen is Chinese-only (force zh); Fish is multilingual — let it detect.
+            if SUPPORTS_LANG and not fish:
                 base_kwargs["lang_code"] = LANG
-            if SUPPORTS_INSTRUCT and eff_instruct:
+            if SUPPORTS_INSTRUCT and eff_instruct and not fish:
                 base_kwargs["instruct"] = eff_instruct
 
             # Long text is synthesized in sentence-sized chunks so a single
@@ -738,7 +818,7 @@ def generate_one(
         "cached": False,
         "gen_time": time.time() - t0,
         "repo": repo,
-        "voice": voice,
+        "voice": "clone" if fish else voice,
         "digest": digest,
     }
 
@@ -779,15 +859,17 @@ def to_friendly_error(exc: Exception) -> str:
 def ui_generate(
     text, model_label, voice, mode, speed, style,
     p_before, p_after, p_between, repeat, out_format, quality,
+    ref_audio=None, ref_text="",
     lang=DEFAULT_LANG,
 ):
     try:
-        repo = MODELS.get(model_label)
+        repo = active_repo(model_label) if (model_label in MODELS or is_fish(model_label)) else None
         if repo and needs_load(repo):
             gr.Info(tr(lang, "loading").format(model=model_label))
         res = generate_one(
             text, model_label, voice, mode, speed, style,
             p_before, p_after, p_between, repeat, out_format, quality,
+            ref_audio=ref_audio, ref_text=ref_text,
         )
     except Exception as exc:  # noqa: BLE001 - surfaced to the user
         raise gr.Error(to_friendly_error(exc))
@@ -820,12 +902,17 @@ def _resolve_model(value: str, default: str, lineno: int) -> str:
     fast_keys = {"fast", "0.6b", "0.6", "small", MODELS["Fast — Qwen3-TTS 0.6B"].lower()}
     hq_keys = {"quality", "higher quality", "hq", "1.7b", "1.7", "large",
                MODELS["Higher Quality — Qwen3-TTS 1.7B"].lower()}
+    clone_keys = {"fish", "clone", "s2", "s2 pro", "fish s2 pro", "voice clone",
+                  FISH_LABEL.lower()}
     if v in fast_keys or v == "fast — qwen3-tts 0.6b":
         return "Fast — Qwen3-TTS 0.6B"
     if v in hq_keys or v == "higher quality — qwen3-tts 1.7b":
         return "Higher Quality — Qwen3-TTS 1.7B"
+    if v in clone_keys:
+        return FISH_LABEL
     raise ValueError(
-        f"CSV line {lineno}: unknown model '{value}'. Use '0.6B' (fast) or '1.7B' (quality)."
+        f"CSV line {lineno}: unknown model '{value}'. Use '0.6B' (fast), '1.7B' "
+        "(quality), or 'fish' (voice clone)."
     )
 
 
@@ -908,6 +995,7 @@ def parse_batch(text_lines: str, csv_path: str | None, defaults: dict) -> list[d
 def ui_batch(
     text_lines, csv_file, voice, model_label, mode, speed, style,
     p_before, p_after, p_between, repeat, out_format, quality,
+    ref_audio=None, ref_text="",
     lang=DEFAULT_LANG,
     progress=gr.Progress(),
 ):
@@ -930,6 +1018,7 @@ def ui_batch(
             res = generate_one(
                 r["text"], r["model_label"], r["voice"], r["mode"], r["speed"],
                 style, p_before, p_after, p_between, repeat, out_format, quality,
+                ref_audio=ref_audio, ref_text=ref_text,
             )
             results[i] = {
                 "text": r["text"],
@@ -1142,7 +1231,22 @@ def build_tts_tab(lang_component, settings: dict):
                         choices=model_choices(L0), value=default_model, label=tr(L0, "model")
                     )
                     ms.build_selector("tts_voice_mode")
-                    voice = gr.Radio(choices=VOICES, value=DEFAULT_VOICE, label=tr(L0, "voice"))
+                    is_clone0 = default_model == FISH_LABEL
+                    voice = gr.Radio(
+                        choices=VOICES, value=DEFAULT_VOICE, label=tr(L0, "voice"),
+                        visible=not is_clone0,
+                    )
+                    ref_audio = gr.Audio(
+                        label=tr(L0, "ref_audio"), type="filepath",
+                        sources=["upload", "microphone"], visible=is_clone0,
+                    )
+                    ref_text = gr.Textbox(
+                        label=tr(L0, "ref_text"), placeholder=tr(L0, "ref_text_ph"),
+                        lines=2, visible=is_clone0,
+                    )
+                    clone_note = gr.Markdown(
+                        tr(L0, "clone_note"), visible=is_clone0, elem_classes="hint-text"
+                    )
 
                     def _persist_model(label: str) -> None:
                         if label in MODELS:
@@ -1150,8 +1254,24 @@ def build_tts_tab(lang_component, settings: dict):
                             s["default_tts_model"] = label
                             storage.save_settings(s)
 
+                    def _toggle_clone(label: str):
+                        """Swap the visible controls when the model changes: named-voice
+                        picker for Qwen, reference-clip uploader for Fish S2 Pro."""
+                        clone = is_fish(label)
+                        return (
+                            gr.update(visible=not clone),  # voice
+                            gr.update(visible=clone),      # ref_audio
+                            gr.update(visible=clone),      # ref_text
+                            gr.update(visible=clone),      # clone_note
+                        )
+
                     model_label.change(_persist_model, inputs=[model_label],
                                        show_progress="hidden")
+                    model_label.change(
+                        _toggle_clone, inputs=[model_label],
+                        outputs=[voice, ref_audio, ref_text, clone_note],
+                        show_progress="hidden",
+                    )
                     sec_out = gr.Markdown(tr(L0, "sec_out"), elem_classes="section-head")
                     with gr.Row():
                         out_format = gr.Radio(
@@ -1227,7 +1347,8 @@ def build_tts_tab(lang_component, settings: dict):
         generate_btn.click(
             fn=ui_generate,
             inputs=[text, model_label, voice, mode, speed, style,
-                    p_before, p_after, p_between, repeat, out_format, quality, lang_component],
+                    p_before, p_after, p_between, repeat, out_format, quality,
+                    ref_audio, ref_text, lang_component],
             outputs=[audio_out, file_out, info_out],
         ).then(ui_files_refresh, outputs=[files_list], show_progress="hidden")
 
@@ -1255,6 +1376,28 @@ def build_tts_tab(lang_component, settings: dict):
                         b_speed = gr.Slider(0.5, 1.5, value=1.0, step=0.05, label=tr(L0, "speed"))
                     b_mode = gr.Radio(choices=mode_choices(L0), value=DEFAULT_MODE, label=tr(L0, "mode"))
                     b_style = gr.Textbox(label=tr(L0, "b_style"), lines=2, interactive=SUPPORTS_INSTRUCT)
+                    b_ref_audio = gr.Audio(
+                        label=tr(L0, "ref_audio"), type="filepath",
+                        sources=["upload", "microphone"], visible=is_clone0,
+                    )
+                    b_ref_text = gr.Textbox(
+                        label=tr(L0, "ref_text"), placeholder=tr(L0, "ref_text_ph"),
+                        lines=2, visible=is_clone0,
+                    )
+
+                    def _toggle_bclone(label: str):
+                        clone = is_fish(label)
+                        return (
+                            gr.update(visible=not clone),  # b_voice
+                            gr.update(visible=clone),      # b_ref_audio
+                            gr.update(visible=clone),      # b_ref_text
+                        )
+
+                    b_model.change(
+                        _toggle_bclone, inputs=[b_model],
+                        outputs=[b_voice, b_ref_audio, b_ref_text],
+                        show_progress="hidden",
+                    )
                     with gr.Accordion(tr(L0, "acc_adv"), open=False) as b_acc_adv:
                         with gr.Row():
                             b_before = gr.Slider(0, 2, value=0.0, step=0.05, label=tr(L0, "p_before"))
@@ -1280,7 +1423,8 @@ def build_tts_tab(lang_component, settings: dict):
         batch_btn.click(
             fn=ui_batch,
             inputs=[batch_text, batch_csv, b_voice, b_model, b_mode, b_speed, b_style,
-                    b_before, b_after, b_between, b_repeat, b_format, b_quality, lang_component],
+                    b_before, b_after, b_between, b_repeat, b_format, b_quality,
+                    b_ref_audio, b_ref_text, lang_component],
             outputs=[batch_table, batch_zip, batch_summary],
         )
 
@@ -1302,6 +1446,7 @@ def build_tts_tab(lang_component, settings: dict):
         b_mode, b_style, b_acc_adv, b_before, b_after, b_between, b_repeat,
         b_format, b_quality, batch_btn, batch_zip, batch_table,
         footer,
+        ref_audio, ref_text, clone_note, b_ref_audio, b_ref_text,
     ]
 
     def i18n_updates(lg: str) -> list:
@@ -1356,6 +1501,11 @@ def build_tts_tab(lang_component, settings: dict):
             gr.update(label=tr(lg, "zip")),                                          # batch_zip
             gr.update(label=tr(lg, "table")),                                        # batch_table
             gr.update(value=f"{tr(lg, 'footer')} `{storage.outputs_dir()}`"),        # footer
+            gr.update(label=tr(lg, "ref_audio")),                                    # ref_audio
+            gr.update(label=tr(lg, "ref_text"), placeholder=tr(lg, "ref_text_ph")),  # ref_text
+            gr.update(value=tr(lg, "clone_note")),                                    # clone_note
+            gr.update(label=tr(lg, "ref_audio")),                                    # b_ref_audio
+            gr.update(label=tr(lg, "ref_text"), placeholder=tr(lg, "ref_text_ph")),  # b_ref_text
         ]
 
     return i18n_outputs, i18n_updates

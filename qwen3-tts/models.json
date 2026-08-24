@@ -41,6 +41,16 @@
       "folder": "Qwen3-TTS-1.7B-Base",
       "legacy_dirs": []
     },
+    "tts-fish-s2pro": {
+      "name": "Fish Audio S2 Pro 4B (Voice clone)",
+      "repo": "mlx-community/fish-audio-s2-pro-8bit",
+      "purpose": "Multilingual text-to-speech, zero-shot voice cloning from a reference clip",
+      "size_gb": 6.7,
+      "ram_gb": 7.5,
+      "kind": "tts",
+      "folder": "Fish-Audio-S2-Pro",
+      "legacy_dirs": []
+    },
     "chat-4b": {
       "name": "Qwen3 4B (Chat & Coding)",
       "repo": "mlx-community/Qwen3-4B-Instruct-2507-4bit",

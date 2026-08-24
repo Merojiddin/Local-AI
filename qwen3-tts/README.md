@@ -6,7 +6,7 @@ leave your computer.
 
 | Tab | What it does | Model choices (Fast / Balanced / Higher quality) |
 |---|---|---|
-| 🎧 TTS | Chinese text-to-speech: word / phrase / sentence / paragraph modes, style instructions, batch + CSV, caching, WAV/MP3; voice mode: built-in voices (CustomVoice) or voice cloning (Base) | Qwen3-TTS 0.6B (≈1.8 GB) / **1.7B** (≈2.9 GB) |
+| 🎧 TTS | Chinese text-to-speech: word / phrase / sentence / paragraph modes, style instructions, batch + CSV, caching, WAV/MP3; voice mode: built-in voices (CustomVoice) or voice cloning (Base). Also **Fish S2 Pro** — multilingual zero-shot voice cloning from a reference clip, with inline `[tag]` emotion control | Qwen3-TTS 0.6B (≈1.8 GB) / **1.7B** (≈2.9 GB) · Fish S2 Pro 4B (≈6.7 GB) |
 | 💬 Chat | Chat & coding assistant, system prompt, temperature, file upload, project-folder questions | Chat: Qwen3 4B / **Qwen3 8B** / Qwen3 14B Q4 · Coding (used when files/folder attached): Qwen3 4B / **Kiwi 8B Q4** / Qwen3 14B Q4 |
 | 🖼 Vision | Image / homework / screenshot analysis, PDF pages | **Qwen3-VL 4B** / Qwen3-VL 8B Q4 |
 | 🎙 Transcribe | Speech-to-text for WAV/MP3/M4A/MP4, zh/en/vi + auto-detect, translate-to-English, TXT/SRT export | **Whisper large-v3-turbo** / large-v3 |

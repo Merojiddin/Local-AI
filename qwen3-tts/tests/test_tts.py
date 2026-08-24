@@ -97,6 +97,22 @@ def test_chunk_max_tokens_bounds():
     )
 
 
+def test_fish_routing():
+    # Fish is recognised and routes to its single repo regardless of voice mode.
+    check("is_fish true for Fish label", tts.is_fish(tts.FISH_LABEL))
+    check("is_fish false for Qwen", not tts.is_fish("Higher Quality — Qwen3-TTS 1.7B"))
+    check("active_repo -> Fish repo", tts.active_repo(tts.FISH_LABEL) == tts.FISH_REPO)
+    check("Fish in registry key map", tts.FISH_REPO in tts.REPO_TO_KEY)
+    check("Fish has a short name", bool(tts.MODEL_SHORT.get(tts.FISH_REPO)))
+    check(
+        "Fish is a third model choice",
+        tts.FISH_LABEL in [v for _, v in tts.model_choices("en")],
+    )
+    # Batch CSV model column accepts Fish aliases.
+    for alias in ("fish", "clone", "Voice Clone — Fish S2 Pro 4B"):
+        check(f"_resolve_model({alias!r})", tts._resolve_model(alias, "x", 1) == tts.FISH_LABEL)
+
+
 if __name__ == "__main__":
     for fn in sorted(k for k in dir() if k.startswith("test_")):
         print(f"[{fn}]")
