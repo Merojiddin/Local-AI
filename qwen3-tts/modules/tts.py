@@ -489,6 +489,19 @@ def normalize_wav(src: Path, dst: Path) -> None:
     )
 
 
+def normalize_wav_loud(src: Path, dst: Path) -> None:
+    """Like normalize_wav, but also level each piece to a common loudness (EBU
+    R128) so separately-generated chunks don't jump in volume when joined. Used
+    only for multi-chunk long text; single-shot audio is left untouched."""
+    _run_ffmpeg(
+        [
+            "-i", str(src),
+            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ac", "1", "-ar", str(SAMPLE_RATE), "-c:a", "pcm_s16le", str(dst),
+        ]
+    )
+
+
 def concat_wavs(parts: list[Path], dst: Path) -> None:
     if len(parts) == 1:
         shutil.copy2(parts[0], dst)
@@ -555,10 +568,15 @@ def file_digest(path: str) -> str:
 # --------------------------------------------------------------------------- #
 # The model generates a bounded number of tokens per call (~12.5 tokens/sec of
 # audio). A long paragraph fed in one shot can exceed that budget and trail off
-# into silence when the cap is hit mid-utterance, so we split on sentence
-# boundaries and synthesize each piece separately, then concatenate. Short text
-# yields a single chunk and behaves exactly as before.
-MAX_CHUNK_CHARS = 120
+# into silence when the cap is hit mid-utterance, so long text is split on
+# sentence boundaries and each piece is synthesized separately, then joined.
+#
+# Each chunk is an independent generation, so its pace/intonation/loudness reset
+# at the boundary — audible as the reading "restarting". Two things keep that in
+# check: (1) the budget is large enough that a normal paragraph stays a SINGLE
+# coherent generation, and chunks are balanced to roughly equal size (no tiny
+# tail pieces); (2) chunks are loudness-matched before joining (normalize_wav_loud).
+MAX_CHUNK_CHARS = 200
 _SENT_END = "。！？!?；;…\n"
 _SENT_SPLIT = re.compile(rf"[^{re.escape(_SENT_END)}]*[{re.escape(_SENT_END)}]?", re.UNICODE)
 _CLAUSE_END = "，,、：:"
@@ -581,24 +599,37 @@ def _hard_pieces(sentence: str, max_chars: int) -> list[str]:
 
 
 def split_for_tts(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[str]:
-    """Split text into synthesis chunks no longer than max_chars, preferring
-    sentence boundaries and packing consecutive sentences together."""
+    """Split text into the fewest synthesis chunks that each stay within
+    max_chars, breaking on sentence boundaries and keeping the pieces roughly
+    equal in size (so there is no stubby final chunk that reads oddly)."""
     text = (text or "").strip()
     if not text:
         return []
     if len(text) <= max_chars:
         return [text]
 
-    sentences = [s.strip() for s in _SENT_SPLIT.findall(text) if s.strip()]
+    # Sentence units, hard-splitting any single sentence longer than the budget.
+    units: list[str] = []
+    for s in (s.strip() for s in _SENT_SPLIT.findall(text)):
+        if not s:
+            continue
+        units.extend(_hard_pieces(s, max_chars) if len(s) > max_chars else [s])
+
+    # Aim for the fewest chunks possible, then even them out: packing to an even
+    # target avoids a long chunk followed by a stubby one (e.g. 182 + 24).
+    total = sum(len(u) for u in units)
+    n_chunks = max(1, -(-total // max_chars))       # ceil(total / max_chars)
+    target = -(-total // n_chunks)                   # ceil(total / n_chunks)
+
     chunks: list[str] = []
     cur = ""
-    for s in sentences:
-        parts = _hard_pieces(s, max_chars) if len(s) > max_chars else [s]
-        for part in parts:
-            if cur and len(cur) + len(part) > max_chars:
-                chunks.append(cur)
-                cur = ""
-            cur += part
+    for u in units:
+        # Flush before adding would overshoot the even target. target <= max_chars
+        # and every unit <= max_chars, so no chunk can exceed max_chars.
+        if cur and len(cur) + len(u) > target:
+            chunks.append(cur)
+            cur = ""
+        cur += u
     if cur:
         chunks.append(cur)
     return chunks
@@ -778,10 +809,12 @@ def generate_one(
             if len(produced) == 1:
                 normalize_wav(produced[0], base)
             else:
+                # Loudness-match the separately-generated chunks so the joined
+                # audio doesn't jump in volume from one piece to the next.
                 norm_parts = []
                 for i, p in enumerate(produced):
                     np_ = tdp / f"n{i}.wav"
-                    normalize_wav(p, np_)
+                    normalize_wav_loud(p, np_)
                     norm_parts.append(np_)
                 concat_wavs(norm_parts, base)
 
