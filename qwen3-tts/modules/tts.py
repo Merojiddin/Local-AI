@@ -494,6 +494,66 @@ def cache_hash(params: dict) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# Long-text chunking
+# --------------------------------------------------------------------------- #
+# The model generates a bounded number of tokens per call (~12.5 tokens/sec of
+# audio). A long paragraph fed in one shot can exceed that budget and trail off
+# into silence when the cap is hit mid-utterance, so we split on sentence
+# boundaries and synthesize each piece separately, then concatenate. Short text
+# yields a single chunk and behaves exactly as before.
+MAX_CHUNK_CHARS = 120
+_SENT_END = "。！？!?；;…\n"
+_SENT_SPLIT = re.compile(rf"[^{re.escape(_SENT_END)}]*[{re.escape(_SENT_END)}]?", re.UNICODE)
+_CLAUSE_END = "，,、：:"
+_CLAUSE_SPLIT = re.compile(rf"[^{re.escape(_CLAUSE_END)}]*[{re.escape(_CLAUSE_END)}]?", re.UNICODE)
+
+
+def _hard_pieces(sentence: str, max_chars: int) -> list[str]:
+    """Break an over-long sentence on clause punctuation, then on raw length."""
+    pieces: list[str] = []
+    for clause in _CLAUSE_SPLIT.findall(sentence):
+        clause = clause.strip()
+        if not clause:
+            continue
+        while len(clause) > max_chars:
+            pieces.append(clause[:max_chars])
+            clause = clause[max_chars:]
+        if clause:
+            pieces.append(clause)
+    return pieces
+
+
+def split_for_tts(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[str]:
+    """Split text into synthesis chunks no longer than max_chars, preferring
+    sentence boundaries and packing consecutive sentences together."""
+    text = (text or "").strip()
+    if not text:
+        return []
+    if len(text) <= max_chars:
+        return [text]
+
+    sentences = [s.strip() for s in _SENT_SPLIT.findall(text) if s.strip()]
+    chunks: list[str] = []
+    cur = ""
+    for s in sentences:
+        parts = _hard_pieces(s, max_chars) if len(s) > max_chars else [s]
+        for part in parts:
+            if cur and len(cur) + len(part) > max_chars:
+                chunks.append(cur)
+                cur = ""
+            cur += part
+    if cur:
+        chunks.append(cur)
+    return chunks
+
+
+def chunk_max_tokens(chunk: str) -> int:
+    """Generous per-chunk token cap: comfortably above what a chunk this long
+    needs (~2.8 tokens/char observed) so generation always reaches EOS."""
+    return max(512, min(4096, len(chunk) * 8 + 128))
+
+
+# --------------------------------------------------------------------------- #
 # Core generation (one item) — with deterministic cache
 # --------------------------------------------------------------------------- #
 def generate_one(
@@ -577,12 +637,10 @@ def generate_one(
     try:
         with tempfile.TemporaryDirectory(dir=storage.temp_dir()) as td:
             tdp = Path(td)
-            prefix = "seg"
-            kwargs = dict(
-                text=text,
+
+            base_kwargs = dict(
                 model=model,
                 output_path=str(tdp),
-                file_prefix=prefix,
                 audio_format="wav",
                 join_audio=True,
                 verbose=False,
@@ -590,22 +648,46 @@ def generate_one(
             # Base models have no named speakers — they use a reference voice
             # (or their default timbre when none is given).
             if not cloning:
-                kwargs["voice"] = voice
+                base_kwargs["voice"] = voice
             if SUPPORTS_SPEED:
-                kwargs["speed"] = eff_speed
+                base_kwargs["speed"] = eff_speed
             if SUPPORTS_LANG:
-                kwargs["lang_code"] = LANG
+                base_kwargs["lang_code"] = LANG
             if SUPPORTS_INSTRUCT and eff_instruct:
-                kwargs["instruct"] = eff_instruct
+                base_kwargs["instruct"] = eff_instruct
 
-            try:
-                generate_audio(**kwargs)
-            except TypeError:
-                for opt in ("instruct", "speed", "lang_code"):
-                    kwargs.pop(opt, None)
-                generate_audio(**kwargs)
+            # Long text is synthesized in sentence-sized chunks so a single
+            # over-long generation can't hit the token cap and trail off into
+            # silence. Each chunk is written as seg000.wav, seg001.wav, … and
+            # concatenated below in lexical (= reading) order.
+            chunks = split_for_tts(text)
+            for idx, chunk in enumerate(chunks):
+                if len(chunks) > 1:
+                    mm.set_task(
+                        f"TTS: generating ({MODEL_SHORT[repo]}) — "
+                        f"part {idx + 1}/{len(chunks)}…"
+                    )
+                out_name = f"seg{idx:03d}"
+                kwargs = dict(
+                    base_kwargs,
+                    text=chunk,
+                    file_prefix=out_name,
+                    max_tokens=chunk_max_tokens(chunk),
+                )
+                try:
+                    generate_audio(**kwargs)
+                except TypeError:
+                    for opt in ("instruct", "speed", "lang_code", "max_tokens"):
+                        kwargs.pop(opt, None)
+                    generate_audio(**kwargs)
 
-            produced = sorted(tdp.glob(f"{prefix}*.wav"))
+                if not (tdp / f"{out_name}.wav").exists():
+                    raise RuntimeError(
+                        "The model did not produce any audio. Try shorter text, "
+                        "another voice, or the other model."
+                    )
+
+            produced = sorted(tdp.glob("seg*.wav"))
             if not produced:
                 raise RuntimeError(
                     "The model did not produce any audio. Try shorter text, another "
