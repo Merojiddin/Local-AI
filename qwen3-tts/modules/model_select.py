@@ -280,7 +280,7 @@ def attach_bridge() -> None:
     """Create the hidden event textbox + dispatcher. Call once, after all tabs."""
     if not _REGISTRY:
         return
-    evt = gr.Textbox(visible=False, elem_id="model-evt")
+    evt = gr.Textbox(visible="hidden", elem_id="model-evt")
 
     def on_event(payload: str):
         from . import memory_manager as mm

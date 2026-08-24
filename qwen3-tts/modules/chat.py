@@ -36,6 +36,42 @@ TOTAL_CONTEXT_CHARS = 24_000   # overall budget for retrieved code
 UPLOAD_CHARS = 8_000           # clip each uploaded file
 
 DEFAULT_SYSTEM = "You are a helpful assistant for writing, coding and Chinese-language teaching."
+THINK_OPEN = "<think>"
+THINK_CLOSE = "</think>"
+THINKING_MESSAGE = "Thinking..."
+
+
+def _visible_reply(raw: str, finished: bool = False) -> str:
+    """Hide Qwen reasoning tags while keeping the final answer streamable."""
+    text = raw
+    saw_thinking = False
+
+    while THINK_OPEN in text:
+        saw_thinking = True
+        start = text.find(THINK_OPEN)
+        end = text.find(THINK_CLOSE, start + len(THINK_OPEN))
+        if end < 0:
+            prefix = text[:start].strip()
+            if prefix:
+                return prefix if finished else f"{prefix}\n\n{THINKING_MESSAGE}"
+            if finished:
+                return (
+                    "The model reached the output limit before producing a final "
+                    "answer. Increase Maximum output length or shorten the prompt."
+                )
+            return THINKING_MESSAGE
+        text = text[:start] + text[end + len(THINK_CLOSE):]
+
+    visible = text.lstrip()
+    if visible.strip():
+        return visible
+    if saw_thinking:
+        if finished:
+            return "The model finished reasoning but did not produce a final answer."
+        return THINKING_MESSAGE
+    if finished:
+        return "The model returned no response."
+    return ""
 
 
 def _load(key: str):
@@ -164,13 +200,22 @@ def chat_fn(message, history, system_prompt, temperature, max_tokens, files, fol
                          {"role": "assistant", "content": ""}]
     mm.set_task("Chat: generating…")
     try:
-        reply = ""
+        raw_reply = ""
+        visible_reply = ""
         for response in stream_generate(
             model, tokenizer, prompt,
             max_tokens=int(max_tokens), sampler=sampler,
         ):
-            reply += response.text
-            history[-1]["content"] = reply
+            raw_reply += response.text
+            updated = _visible_reply(raw_reply)
+            if updated != visible_reply:
+                visible_reply = updated
+                history[-1]["content"] = visible_reply
+                yield history, ""
+
+        final_reply = _visible_reply(raw_reply, finished=True)
+        if final_reply != visible_reply:
+            history[-1]["content"] = final_reply
             yield history, ""
     finally:
         mm.HEAVY.touch()
@@ -188,9 +233,11 @@ def build_chat_tab(settings: dict):
             with gr.Row():
                 msg = gr.Textbox(
                     placeholder="Ask anything — coding, writing, Chinese…",
-                    show_label=False, lines=2, scale=8,
+                    show_label=False, lines=2, scale=8, elem_id="chat-message",
                 )
-                send_btn = gr.Button("Send", variant="primary", scale=1)
+                send_btn = gr.Button(
+                    "Send", variant="primary", scale=1, elem_id="chat-send",
+                )
             with gr.Row():
                 clear_btn = gr.Button("🗑 Clear conversation", size="sm")
         with gr.Column(scale=4):

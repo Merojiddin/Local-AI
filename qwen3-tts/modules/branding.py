@@ -307,6 +307,25 @@ window.changModelInstall = (ev, btn) => {
   box.value = JSON.stringify({action: 'install', model: btn.dataset.model, t: Date.now()});
   box.dispatchEvent(new Event('input', {bubbles: true}));
 };
+document.addEventListener('keydown', (ev) => {
+  const input = ev.target;
+  if (!(input instanceof HTMLTextAreaElement) || !input.closest('#chat-message')) return;
+  if (ev.key !== 'Enter' || ev.isComposing || ev.keyCode === 229) return;
+
+  if (ev.metaKey) {
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+    input.setRangeText('\\n', input.selectionStart, input.selectionEnd, 'end');
+    input.dispatchEvent(new Event('input', {bubbles: true}));
+    return;
+  }
+
+  if (!ev.shiftKey && !ev.ctrlKey && !ev.altKey) {
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+    document.querySelector('#chat-send')?.click();
+  }
+}, true);
 </script>
 """
 
