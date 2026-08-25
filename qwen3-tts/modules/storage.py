@@ -175,8 +175,8 @@ def build_settings_tab():
             with gr.Group():
                 gr.Markdown("**Behaviour**", elem_classes="section-head")
                 in_default_tts = gr.Radio(
-                    choices=["Fast — Qwen3-TTS 0.6B", "Higher Quality — Qwen3-TTS 1.7B"],
-                    value=s["default_tts_model"], label="Default TTS model",
+                    choices=["Higher Quality — Qwen3-TTS 1.7B"],
+                    value="Higher Quality — Qwen3-TTS 1.7B", label="Default TTS model",
                 )
                 in_theme = gr.Checkbox(value=bool(s["force_light_theme"]), label="Force light theme (matches the Chang branding)")
                 in_auto_unload = gr.Checkbox(value=bool(s["auto_unload"]), label="Automatically unload idle models")

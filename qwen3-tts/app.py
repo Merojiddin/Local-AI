@@ -175,10 +175,10 @@ def build_ui() -> "gr.Blocks":
 
 
 # --------------------------------------------------------------------------- #
-# Legacy CLI: download both TTS models (kept for backwards compatibility)
+# Legacy CLI: download the TTS model (kept for backwards compatibility)
 # --------------------------------------------------------------------------- #
 def download_tts_models() -> None:
-    for key in ("tts-0.6b", "tts-1.7b"):
+    for key in ("tts-1.7b",):
         info = mgr.MODELS[key]
         existing = mgr.installed_path(key)
         if existing is not None:

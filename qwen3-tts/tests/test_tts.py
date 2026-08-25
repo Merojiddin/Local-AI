@@ -64,11 +64,12 @@ def test_long_text_chunked_within_budget():
 
 
 def test_sentence_boundaries_preferred():
-    # Two sentences that together exceed the budget must split between them,
-    # not mid-sentence.
+    # Two sentences that together exceed the (explicit) budget must split
+    # between them, not mid-sentence. Explicit max_chars keeps this independent
+    # of the module default.
     a = "第一句话内容" * 12  # ~72 chars
     b = "第二句话内容" * 12
-    chunks = tts.split_for_tts(a + "。" + b + "。")
+    chunks = tts.split_for_tts(a + "。" + b + "。", max_chars=100)
     check("splits between sentences", len(chunks) == 2, f"got {len(chunks)}")
     check("first chunk ends the first sentence", chunks[0].endswith("。"))
 

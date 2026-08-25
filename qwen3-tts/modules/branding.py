@@ -143,9 +143,10 @@ footer { display: none !important; }
 .status-warn { color: #B3261E; font-weight: 700; }
 
 /* ---- compact blocks ---- */
-.block, .form { padding-top: 2px !important; padding-bottom: 2px !important; }
-.gap { gap: 4px !important; }
-.gr-group, .styler { padding: 4px 8px !important; }
+.block, .form { padding-top: 1px !important; padding-bottom: 1px !important; }
+.gap { gap: 3px !important; }
+.gr-group, .styler { padding: 3px 8px !important; }
+.gr-group { margin-bottom: 4px !important; }
 .section-head p {
   font-size: 0.78rem !important; margin: 0 !important; letter-spacing: 0.04em;
   text-transform: uppercase; color: var(--chang-orange) !important;
@@ -174,18 +175,24 @@ fieldset.block { gap: 2px !important; }
 }
 .lib-list {
   border: 1px solid var(--chang-line); border-radius: 8px; background: #fff;
-  max-height: 320px; overflow-y: auto; font-size: 0.8rem;
+  max-height: 300px; overflow-y: auto; font-size: 0.8rem;
 }
 .lib-row {
-  display: grid; grid-template-columns: 1fr 58px 112px 104px;
-  gap: 6px; align-items: center; padding: 4px 8px;
+  display: grid; grid-template-columns: minmax(0, 1fr) 64px 120px 100px;
+  gap: 8px; align-items: center; padding: 3px 10px;
   border-bottom: 1px solid var(--chang-line);
 }
 .lib-row:last-child { border-bottom: none; }
 .lib-head-row {
   font-weight: 700; position: sticky; top: 0; z-index: 1; background: #FFFDF8;
 }
-.lib-name { overflow-wrap: anywhere; }
+/* min-width:0 lets the name track shrink instead of forcing overflow, and the
+   2-line clamp stops long Chinese filenames from stacking one glyph per line. */
+.lib-name {
+  min-width: 0; overflow-wrap: anywhere; word-break: break-word;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .lib-size, .lib-date { color: #7A5C3E; font-size: 0.72rem; white-space: nowrap; }
 .lib-actions { display: flex; gap: 4px; justify-content: flex-end; }
 .lib-btn {
