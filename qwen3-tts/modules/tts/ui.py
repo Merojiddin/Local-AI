@@ -451,6 +451,18 @@ def build_tts_tab(lang_component, settings: dict):
                         label=tr(L0, "ref_text"), placeholder=tr(L0, "ref_text_ph"),
                         lines=2, visible=is_clone0,
                     )
+                    # Reuse voices saved in the Single tab as batch defaults.
+                    with gr.Group(visible=is_clone0) as b_saved_group:
+                        with gr.Row():
+                            b_saved_voice = gr.Dropdown(
+                                choices=vx.voice_names(), value=None,
+                                label=tr(L0, "saved_pick"), scale=4, min_width=140,
+                                filterable=False,
+                            )
+                            b_load_voice_btn = gr.Button(
+                                tr(L0, "load_voice"), size="sm", scale=0, min_width=90,
+                            )
+                        b_saved_status = gr.Markdown(elem_classes="hint-text")
 
                     def _toggle_bclone(label: str):
                         clone = clone_active(label)
@@ -458,21 +470,28 @@ def build_tts_tab(lang_component, settings: dict):
                             gr.update(visible=not clone),  # b_voice
                             gr.update(visible=clone),      # b_ref_audio
                             gr.update(visible=clone),      # b_ref_text
+                            gr.update(visible=clone),      # b_saved_group
                         )
 
                     b_model.change(
                         _toggle_bclone, inputs=[b_model],
-                        outputs=[b_voice, b_ref_audio, b_ref_text],
+                        outputs=[b_voice, b_ref_audio, b_ref_text, b_saved_group],
                         show_progress="hidden",
                     )
                     ms.add_bridge_reactor(
                         inputs=[b_model],
-                        outputs=[b_voice, b_ref_audio, b_ref_text],
+                        outputs=[b_voice, b_ref_audio, b_ref_text, b_saved_group],
                         fn=lambda data, label: (
                             _toggle_bclone(label)
                             if data.get("cat") == "tts_voice_mode"
-                            else (gr.update(), gr.update(), gr.update())
+                            else (gr.update(), gr.update(), gr.update(), gr.update())
                         ),
+                    )
+                    b_load_voice_btn.click(
+                        ui_load_voice,
+                        inputs=[b_saved_voice, lang_component],
+                        outputs=[b_ref_audio, b_ref_text, b_saved_status],
+                        show_progress="hidden",
                     )
                     with gr.Accordion(tr(L0, "acc_adv"), open=False) as b_acc_adv:
                         with gr.Row():
@@ -522,6 +541,8 @@ def build_tts_tab(lang_component, settings: dict):
         b_format, b_quality, batch_btn, batch_zip, batch_table,
         footer,
         ref_audio, ref_text, clone_note, b_ref_audio, b_ref_text,
+        saved_head, saved_voice, voice_name, save_voice_btn, load_voice_btn,
+        b_saved_voice, b_load_voice_btn,
     ]
 
     def i18n_updates(lg: str) -> list:
@@ -575,6 +596,13 @@ def build_tts_tab(lang_component, settings: dict):
             gr.update(value=tr(lg, "clone_note")),                                    # clone_note
             gr.update(label=tr(lg, "ref_audio")),                                    # b_ref_audio
             gr.update(label=tr(lg, "ref_text"), placeholder=tr(lg, "ref_text_ph")),  # b_ref_text
+            gr.update(value=tr(lg, "saved_head")),                                   # saved_head
+            gr.update(label=tr(lg, "saved_pick")),                                   # saved_voice
+            gr.update(label=tr(lg, "save_as"), placeholder=tr(lg, "save_as_ph")),    # voice_name
+            gr.update(value=tr(lg, "save_voice")),                                   # save_voice_btn
+            gr.update(value=tr(lg, "load_voice")),                                   # load_voice_btn
+            gr.update(label=tr(lg, "saved_pick")),                                   # b_saved_voice
+            gr.update(value=tr(lg, "load_voice")),                                   # b_load_voice_btn
         ]
 
     return i18n_outputs, i18n_updates

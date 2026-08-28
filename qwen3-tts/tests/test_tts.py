@@ -114,6 +114,66 @@ def test_fish_routing():
         check(f"_resolve_model({alias!r})", tts._resolve_model(alias, "x", 1) == tts.FISH_LABEL)
 
 
+def _write_wav(path: Path) -> None:
+    import struct
+    import wave
+
+    with wave.open(str(path), "w") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(24000)
+        w.writeframes(struct.pack("<" + "h" * 2400, *([0] * 2400)))
+
+
+def test_saved_voices():
+    # Persist voice-clone profiles to an isolated temp dir so real user data is
+    # never touched. Exercises save, list, get, overwrite and delete.
+    import tempfile
+
+    from modules import storage
+    from modules.tts import voices as vx
+
+    root = Path(tempfile.mkdtemp())
+    vdir = root / "voices"
+    orig = storage.load_settings
+    storage.load_settings = lambda: {**orig(), "voices_dir": str(vdir)}
+    try:
+        clip = root / "ref.wav"
+        _write_wav(clip)
+
+        check("starts empty", vx.list_voices() == [])
+        v = vx.save_voice("李老师 Li", str(clip), "你好")
+        check("clip copied in", Path(v["path"]).is_file())
+        check("clip lives under voices dir", Path(v["path"]).parent == vdir)
+        check("name listed", vx.voice_names() == ["李老师 Li"])
+        check("transcript round-trips", vx.get_voice("李老师 Li")["ref_text"] == "你好")
+
+        # Re-saving the same name overwrites in place (no duplicate profile).
+        vx.save_voice("李老师 Li", str(clip), "更新")
+        check("overwrite keeps one entry", len(vx.list_voices()) == 1)
+        check("overwrite updates text", vx.get_voice("李老师 Li")["ref_text"] == "更新")
+
+        # A different name that slugs the same still gets its own files.
+        vx.save_voice("!!!", str(clip), "a")
+        vx.save_voice("???", str(clip), "b")
+        check("slug collision keeps both", len(vx.list_voices()) == 3)
+
+        # Empty name / missing clip are rejected.
+        for bad in (lambda: vx.save_voice("", str(clip)),
+                    lambda: vx.save_voice("x", None)):
+            try:
+                bad()
+                check("invalid save rejected", False, "no error raised")
+            except ValueError:
+                check("invalid save rejected", True)
+
+        check("delete removes it", vx.delete_voice("李老师 Li"))
+        check("delete is idempotent", not vx.delete_voice("李老师 Li"))
+        check("two profiles remain", len(vx.list_voices()) == 2)
+    finally:
+        storage.load_settings = orig
+
+
 if __name__ == "__main__":
     for fn in sorted(k for k in dir() if k.startswith("test_")):
         print(f"[{fn}]")
