@@ -40,8 +40,33 @@ from .audio import (
     normalize_wav_loud,
     to_mp3,
 )
-from .chunking import chunk_max_tokens, split_for_tts
+from .chunking import (
+    FISH_MAX_CHUNK_CHARS,
+    MAX_CHUNK_CHARS,
+    chunk_max_tokens,
+    split_for_tts,
+)
 from .naming import cache_hash, file_digest, unique_output_path
+
+
+def _no_audio_message(fish: bool) -> str:
+    """Message for a missing segment. mlx_audio's generate_audio swallows every
+    exception (it just prints and returns without writing a file), so the real
+    cause never reaches us. On this hardware a silently-missing Fish segment is
+    almost always its 44.1 kHz vocoder overflowing the ~8.9 GiB single-buffer
+    limit, so point Fish users at the lighter Qwen path that avoids it."""
+    if fish:
+        return (
+            "The Fish S2 Pro model ran out of GPU memory decoding this audio "
+            "(its 44.1 kHz vocoder needs more than macOS allows in one buffer). "
+            "Try shorter text, or switch the model to Qwen3-TTS 1.7B with Voice "
+            "mode set to “Clone a voice” — it clones from your "
+            "reference clip too, but is far lighter on memory."
+        )
+    return (
+        "The model did not produce any audio. Try shorter text, another voice, "
+        "or the other model."
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -174,7 +199,8 @@ def generate_one(
             # over-long generation can't hit the token cap and trail off into
             # silence. Each chunk is written as seg000.wav, seg001.wav, … and
             # concatenated below in lexical (= reading) order.
-            chunks = split_for_tts(text)
+            chunk_chars = FISH_MAX_CHUNK_CHARS if fish else MAX_CHUNK_CHARS
+            chunks = split_for_tts(text, chunk_chars)
             for idx, chunk in enumerate(chunks):
                 if len(chunks) > 1:
                     mm.set_task(
@@ -186,7 +212,7 @@ def generate_one(
                     base_kwargs,
                     text=chunk,
                     file_prefix=out_name,
-                    max_tokens=chunk_max_tokens(chunk),
+                    max_tokens=chunk_max_tokens(chunk, fish=fish),
                 )
                 try:
                     generate_audio(**kwargs)
@@ -196,17 +222,11 @@ def generate_one(
                     generate_audio(**kwargs)
 
                 if not (tdp / f"{out_name}.wav").exists():
-                    raise RuntimeError(
-                        "The model did not produce any audio. Try shorter text, "
-                        "another voice, or the other model."
-                    )
+                    raise RuntimeError(_no_audio_message(fish))
 
             produced = sorted(tdp.glob("seg*.wav"))
             if not produced:
-                raise RuntimeError(
-                    "The model did not produce any audio. Try shorter text, another "
-                    "voice, or the other model."
-                )
+                raise RuntimeError(_no_audio_message(fish))
 
             base = tdp / "base.wav"
             if len(produced) == 1:

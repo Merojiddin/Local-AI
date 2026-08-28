@@ -20,6 +20,21 @@ import re
 # coherent generation, and chunks are balanced to roughly equal size (no tiny
 # tail pieces); (2) chunks are loudness-matched before joining (normalize_wav_loud).
 MAX_CHUNK_CHARS = 200
+
+# Fish S2 Pro is a different beast from the light 24 kHz Qwen models: it is a 4B
+# model at 44.1 kHz whose vocoder (codec.decode) materialises a whole chunk's
+# waveform in a SINGLE Metal buffer, growing linearly with the tokens generated.
+# On a 16 GB Mac the largest single GPU buffer is ~8.9 GiB, and a normal-length
+# chunk overflows it — the model dies with "[metal::malloc] Attempting to
+# allocate … greater than the maximum allowed buffer size". That ceiling is a
+# fixed device property: it cannot be raised with set_memory_limit /
+# set_wired_limit (those bound the *total* working set, not one allocation), so
+# the only cure is to decode less audio per call. Fish therefore uses a much
+# smaller chunk and a hard token cap that keeps every decode well under the
+# buffer limit while coexisting with the ~7.5 GB resident model.
+FISH_MAX_CHUNK_CHARS = 60
+FISH_MAX_TOKENS = 480
+
 _SENT_END = "。！？!?；;…\n"
 _SENT_SPLIT = re.compile(rf"[^{re.escape(_SENT_END)}]*[{re.escape(_SENT_END)}]?", re.UNICODE)
 _CLAUSE_END = "，,、：:"
@@ -91,7 +106,15 @@ def split_for_tts(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[str]:
     return chunks
 
 
-def chunk_max_tokens(chunk: str) -> int:
-    """Generous per-chunk token cap: comfortably above what a chunk this long
-    needs (~2.8 tokens/char observed) so generation always reaches EOS."""
+def chunk_max_tokens(chunk: str, fish: bool = False) -> int:
+    """Per-chunk token cap: comfortably above what a chunk this long needs
+    (~2.8 tokens/char observed) so generation always reaches EOS.
+
+    Fish gets a hard, low ceiling instead: its 44.1 kHz vocoder decodes the whole
+    chunk in one Metal buffer, so an over-long generation would blow past the
+    ~8.9 GiB single-buffer limit. FISH_MAX_CHUNK_CHARS keeps chunks short enough
+    that this cap is never actually reached mid-utterance (which would clip the
+    tail to silence)."""
+    if fish:
+        return max(256, min(FISH_MAX_TOKENS, len(chunk) * 8 + 128))
     return max(512, min(4096, len(chunk) * 8 + 128))
