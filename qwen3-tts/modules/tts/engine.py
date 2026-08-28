@@ -36,7 +36,6 @@ from .audio import (
     _require_ffmpeg,
     concat_wavs,
     make_silence,
-    normalize_wav,
     normalize_wav_loud,
     to_mp3,
 )
@@ -229,11 +228,14 @@ def generate_one(
                 raise RuntimeError(_no_audio_message(fish))
 
             base = tdp / "base.wav"
+            # Loudness-normalize every piece to the same EBU R128 target. This
+            # matches volume BETWEEN chunks of one long clip *and* keeps short
+            # (single-chunk) and long (multi-chunk) generations at the same level
+            # — otherwise the model's quiet native output leaves short clips far
+            # quieter than the loudness-matched long ones.
             if len(produced) == 1:
-                normalize_wav(produced[0], base)
+                normalize_wav_loud(produced[0], base)
             else:
-                # Loudness-match the separately-generated chunks so the joined
-                # audio doesn't jump in volume from one piece to the next.
                 norm_parts = []
                 for i, p in enumerate(produced):
                     np_ = tdp / f"n{i}.wav"
