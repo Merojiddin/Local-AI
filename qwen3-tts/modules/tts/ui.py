@@ -164,16 +164,48 @@ def build_tts_tab(lang_component, settings: dict):
         )
 
     with gr.Tab(tr(L0, "tab_single")) as tab_single:
-        with gr.Row(equal_height=False):
-            with gr.Column(scale=5):
-                with gr.Group():
+        # Three balanced columns — Text · Pronunciation · Voice & Model — so the
+        # whole workspace is visible at once instead of stacking into one tall
+        # scroll. The action bar (generate + preview) and the library sit below,
+        # full width.
+        with gr.Row(equal_height=True, elem_id="tts-main"):
+            # ---- Column 1: Text ----
+            with gr.Column(scale=5, elem_id="tts-col-text"):
+                with gr.Group(elem_classes="tts-panel"):
                     sec_text = gr.Markdown(tr(L0, "sec_text"), elem_classes="section-head")
                     text = gr.Textbox(
                         label=tr(L0, "text_label"),
                         placeholder=tr(L0, "text_ph"),
-                        lines=3,
+                        lines=15, max_lines=24,
+                        elem_id="tts-text",
                     )
-                with gr.Group():
+
+            # ---- Column 2: Pronunciation ----
+            with gr.Column(scale=4):
+                with gr.Group(elem_classes="tts-panel"):
+                    sec_pron = gr.Markdown(tr(L0, "sec_pron"), elem_classes="section-head")
+                    mode = gr.Radio(choices=mode_choices(L0), value=DEFAULT_MODE, label=tr(L0, "mode"))
+                    style = gr.Textbox(
+                        label=tr(L0, "style"),
+                        placeholder=tr(L0, "style_ph"),
+                        lines=2,
+                        interactive=SUPPORTS_INSTRUCT,
+                    )
+                    with gr.Accordion(tr(L0, "acc_examples"), open=False, visible=show_adv) as acc_examples:
+                        gr.Examples(examples=[[s] for s in STYLE_EXAMPLES], inputs=[style], label="")
+                    with gr.Row():
+                        speed = gr.Slider(
+                            minimum=0.5, maximum=1.5, value=1.0, step=0.05, label=tr(L0, "speed")
+                        )
+                        repeat = gr.Slider(1, 5, value=1, step=1, label=tr(L0, "repeat"))
+                    with gr.Row():
+                        p_before = gr.Slider(0, 2, value=0.0, step=0.05, label=tr(L0, "p_before"))
+                        p_after = gr.Slider(0, 2, value=0.0, step=0.05, label=tr(L0, "p_after"))
+                        p_between = gr.Slider(0, 2, value=0.3, step=0.05, label=tr(L0, "p_between"))
+
+            # ---- Column 3: Voice & Model (+ Output) ----
+            with gr.Column(scale=4):
+                with gr.Group(elem_classes="tts-panel"):
                     sec_voice = gr.Markdown(tr(L0, "sec_voice"), elem_classes="section-head")
                     model_label = gr.Radio(
                         choices=model_choices(L0), value=default_model, label=tr(L0, "model")
@@ -187,6 +219,7 @@ def build_tts_tab(lang_component, settings: dict):
                     ref_audio = gr.Audio(
                         label=tr(L0, "ref_audio"), type="filepath",
                         sources=["upload", "microphone"], visible=is_clone0,
+                        elem_id="tts-ref-audio",
                     )
                     ref_text = gr.Textbox(
                         label=tr(L0, "ref_text"), placeholder=tr(L0, "ref_text_ph"),
@@ -220,6 +253,7 @@ def build_tts_tab(lang_component, settings: dict):
                         outputs=[voice, ref_audio, ref_text, clone_note],
                         show_progress="hidden",
                     )
+                with gr.Group(elem_classes="tts-panel"):
                     sec_out = gr.Markdown(tr(L0, "sec_out"), elem_classes="section-head")
                     with gr.Row():
                         out_format = gr.Radio(
@@ -228,35 +262,22 @@ def build_tts_tab(lang_component, settings: dict):
                         quality = gr.Radio(
                             choices=QUALITIES, value=DEFAULT_QUALITY, label=tr(L0, "quality"), scale=3
                         )
-                generate_btn = gr.Button(tr(L0, "generate"), variant="primary")
-                audio_out = gr.Audio(label=tr(L0, "audio"), type="filepath", elem_id="tts-audio")
+
+        # ---- Action bar: generate · preview · download — full width below ----
+        with gr.Row(equal_height=True, elem_id="tts-actions"):
+            generate_btn = gr.Button(
+                tr(L0, "generate"), variant="primary", scale=0,
+                min_width=210, elem_id="tts-generate",
+            )
+            audio_out = gr.Audio(
+                label=tr(L0, "audio"), type="filepath", elem_id="tts-audio", scale=4
+            )
+            with gr.Column(scale=2, min_width=210, elem_id="tts-result-col"):
                 file_out = gr.DownloadButton(tr(L0, "download"), size="sm")
                 info_out = gr.Markdown(elem_classes="result-info")
 
-            with gr.Column(scale=6):
-                with gr.Group():
-                    sec_pron = gr.Markdown(tr(L0, "sec_pron"), elem_classes="section-head")
-                    mode = gr.Radio(choices=mode_choices(L0), value=DEFAULT_MODE, label=tr(L0, "mode"))
-                    style = gr.Textbox(
-                        label=tr(L0, "style"),
-                        placeholder=tr(L0, "style_ph"),
-                        lines=2,
-                        interactive=SUPPORTS_INSTRUCT,
-                    )
-                    with gr.Accordion(tr(L0, "acc_examples"), open=False, visible=show_adv) as acc_examples:
-                        gr.Examples(examples=[[s] for s in STYLE_EXAMPLES], inputs=[style], label="")
-                    with gr.Row():
-                        speed = gr.Slider(
-                            minimum=0.5, maximum=1.5, value=1.0, step=0.05, label=tr(L0, "speed")
-                        )
-                        repeat = gr.Slider(1, 5, value=1, step=1, label=tr(L0, "repeat"))
-                    with gr.Row():
-                        p_before = gr.Slider(0, 2, value=0.0, step=0.05, label=tr(L0, "p_before"))
-                        p_after = gr.Slider(0, 2, value=0.0, step=0.05, label=tr(L0, "p_after"))
-                        p_between = gr.Slider(0, 2, value=0.3, step=0.05, label=tr(L0, "p_between"))
-
-        # Library spans the full width below both columns so long Chinese
-        # filenames have room to lay out instead of stacking one glyph per line.
+        # Library spans the full width below so long Chinese filenames have room
+        # to lay out instead of stacking one glyph per line.
         with gr.Group():
             with gr.Row(elem_id="lib-head"):
                 sec_files = gr.Markdown(

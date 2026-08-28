@@ -166,6 +166,28 @@ fieldset.block { gap: 2px !important; }
 #tts-audio .empty { min-height: 56px !important; }
 #tts-audio { min-height: 0 !important; }
 
+/* ---- TTS single tab: three-column workspace that fits one window ---- */
+#tts-main { align-items: stretch; gap: 10px !important; }
+#tts-main > .column { gap: 6px !important; }
+.tts-panel { height: 100%; display: flex; flex-direction: column; }
+/* Text column: the textarea grows to fill the tallest sibling column. */
+#tts-col-text, #tts-col-text > *, #tts-col-text .tts-panel { height: 100%; }
+#tts-text { flex: 1 1 auto; display: flex; flex-direction: column; }
+#tts-text label { flex: 1 1 auto; display: flex; flex-direction: column; }
+#tts-text textarea {
+  flex: 1 1 auto; min-height: 300px !important; height: 100% !important; resize: none;
+}
+/* Keep the reference-clip player from towering in clone mode. */
+#tts-ref-audio, #tts-ref-audio .component-wrap { min-height: 0 !important; }
+#tts-ref-audio .empty { min-height: 44px !important; }
+#tts-ref-audio .waveform-container { min-height: 0 !important; }
+
+/* ---- action bar: generate · preview · download ---- */
+#tts-actions { align-items: center; gap: 10px !important; margin: 6px 0 4px; }
+#tts-generate { min-height: 54px; font-size: 0.95rem !important; align-self: stretch; }
+#tts-result-col { justify-content: center; gap: 4px !important; }
+#tts-actions #tts-audio .empty { min-height: 44px !important; }
+
 /* ---- library: header icon buttons + per-row file list ---- */
 #lib-head { align-items: center; gap: 4px !important; }
 #lib-head .section-head { flex-grow: 1; }
@@ -175,7 +197,7 @@ fieldset.block { gap: 2px !important; }
 }
 .lib-list {
   border: 1px solid var(--chang-line); border-radius: 8px; background: #fff;
-  max-height: 300px; overflow-y: auto; font-size: 0.8rem;
+  max-height: 220px; overflow-y: auto; font-size: 0.8rem;
 }
 .lib-row {
   display: grid; grid-template-columns: minmax(0, 1fr) 64px 120px 100px;
