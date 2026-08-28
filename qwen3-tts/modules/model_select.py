@@ -251,12 +251,28 @@ def render(cat: str) -> str:
 # --------------------------------------------------------------------------- #
 _REGISTRY: dict[str, gr.HTML] = {}
 _LAST_HTML: dict[str, str] = {}
+# Extra components driven by the shared selector bridge. A tab registers a
+# reactor so it can respond to a selection that no ordinary Gradio input reports
+# — e.g. the TTS tab showing its reference-clip uploader when Voice mode flips to
+# "Clone a voice". Each reactor's fn(data, *input_values) returns one gr.update
+# per declared output.
+_REACTORS: list[dict] = []
 
 
 def build_selector(cat: str) -> gr.HTML:
     comp = gr.HTML(render(cat), elem_classes="ms-holder")
     _REGISTRY[cat] = comp
     return comp
+
+
+def add_bridge_reactor(inputs: list, outputs: list, fn) -> None:
+    """Register extra components driven by the shared selector bridge.
+
+    After every selector event, ``fn(data, *input_values)`` runs — ``data`` is the
+    parsed event dict, ``input_values`` are the current values of ``inputs`` — and
+    its return (a list of ``gr.update`` lining up 1:1 with ``outputs``) is appended
+    to the bridge's outputs. Call before ``attach_bridge``."""
+    _REACTORS.append({"inputs": list(inputs), "outputs": list(outputs), "fn": fn})
 
 
 def components() -> list[gr.HTML]:
@@ -281,8 +297,10 @@ def attach_bridge() -> None:
     if not _REGISTRY:
         return
     evt = gr.Textbox(visible="hidden", elem_id="model-evt")
+    extra_inputs = [c for r in _REACTORS for c in r["inputs"]]
+    extra_outputs = [c for r in _REACTORS for c in r["outputs"]]
 
-    def on_event(payload: str):
+    def on_event(payload: str, *extra_vals):
         from . import memory_manager as mm
 
         try:
@@ -312,6 +330,19 @@ def attach_bridge() -> None:
                     mm.set_task("idle")
                 gr.Info(f"{info['name']} installed.")
 
-        return refresh_updates(force=True)
+        updates = refresh_updates(force=True)
+        # Fan the event out to any registered reactors, slicing their input
+        # values back out of extra_vals in registration order.
+        idx = 0
+        for r in _REACTORS:
+            n_in = len(r["inputs"])
+            updates.extend(r["fn"](data, *extra_vals[idx:idx + n_in]))
+            idx += n_in
+        return updates
 
-    evt.input(on_event, inputs=[evt], outputs=components(), show_progress="hidden")
+    evt.input(
+        on_event,
+        inputs=[evt, *extra_inputs],
+        outputs=[*components(), *extra_outputs],
+        show_progress="hidden",
+    )

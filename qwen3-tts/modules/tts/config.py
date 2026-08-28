@@ -72,6 +72,16 @@ def is_fish(model_label: str) -> bool:
     return model_label == FISH_LABEL
 
 
+def clone_active(model_label: str) -> bool:
+    """True when this generation clones from an uploaded reference clip, i.e. the
+    reference-clip uploader should be shown instead of the named-voice picker.
+
+    Fish always clones. A Qwen size clones when Voice mode is "Clone a voice"
+    (Base): the Qwen Base weights carry a speaker encoder that reproduces the
+    timbre of a reference clip, so the uploader applies to them too."""
+    return is_fish(model_label) or voice_mode() == "Base"
+
+
 def active_repo(model_label: str) -> str:
     """The repo for this model. Fish has a single repo; the Qwen sizes depend on
     the currently saved voice mode (CustomVoice vs Base)."""

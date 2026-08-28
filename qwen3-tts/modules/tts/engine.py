@@ -68,6 +68,44 @@ def _no_audio_message(fish: bool) -> str:
     )
 
 
+def _reference_transcript(ref_audio: str) -> str:
+    """Transcript of a reference clip for Qwen ICL voice cloning.
+
+    Cached by the clip's content digest so each clip is transcribed once. Uses
+    the app's own (already-installed) Whisper via the speech-to-text selector —
+    never mlx_audio's default STT, which would download a separate model. Returns
+    "" when transcription is unavailable; the caller then clones from the speaker
+    embedding alone (no ICL text prior).
+    """
+    digest = file_digest(ref_audio)
+    cache = storage.cache_dir() / f"reftext_{digest}.txt"
+    if cache.exists():
+        return cache.read_text(encoding="utf-8").strip()
+
+    try:
+        from .. import transcription as stt
+
+        model = stt._load()
+        mm.set_task("TTS: transcribing reference clip…")
+        result = model.generate(
+            str(ref_audio), language=None, task="transcribe",
+            return_timestamps=False, verbose=False,
+        )
+        text = (getattr(result, "text", "") or "").strip()
+    except Exception:  # noqa: BLE001 - clone still works via the speaker embedding
+        text = ""
+    finally:
+        # Release the STT model's turn in the single heavy slot so the TTS model
+        # can load next without both being resident on a 16 GB Mac.
+        mm.HEAVY.touch()
+
+    # Cache the outcome — including "" — so a missing/failed Whisper isn't reloaded
+    # on every future generation with this clip. A typed transcript bypasses this
+    # helper entirely, so a cached "" never blocks the higher-quality ICL path.
+    cache.write_text(text, encoding="utf-8")
+    return text
+
+
 # --------------------------------------------------------------------------- #
 # Core generation (one item) — with deterministic cache
 # --------------------------------------------------------------------------- #
@@ -108,9 +146,21 @@ def generate_one(
 
     repo = active_repo(model_label)
     ref_text = (ref_text or "").strip()
-    # Fish clones from the reference clip; the Qwen Base voice mode relies on the
-    # model's own default timbre. Either way there is no named speaker to pass.
+    # Cloning = speak in the voice of an uploaded reference clip, with no named
+    # speaker. Fish always clones. A Qwen size clones when Voice mode is "Clone a
+    # voice" (Base) AND a clip was supplied — the Qwen Base weights carry a
+    # speaker encoder for exactly this. With Base selected but no clip, Qwen falls
+    # back to its own default timbre (unchanged behaviour).
     cloning = fish or voice_mode() == "Base"
+    qwen_clone = cloning and not fish and bool(ref_audio)
+
+    # Qwen clones the timbre from the clip's speaker embedding either way; adding
+    # the reference's transcript unlocks the higher-quality ICL path. So when the
+    # user didn't type one, best-effort transcribe with the app's own Whisper
+    # (cached per clip). If that's unavailable, fall through with an empty
+    # transcript — cloning still works, just without the ICL boost.
+    if qwen_clone and not ref_text:
+        ref_text = _reference_transcript(ref_audio)
     ext = "mp3" if str(out_format).upper() == "MP3" else "wav"
     kbps = QUALITY_KBPS.get(quality, 192)
     repeat = max(1, min(5, int(repeat)))
@@ -134,7 +184,7 @@ def generate_one(
         "format": ext,
         "quality": kbps,
     }
-    if fish:
+    if fish or qwen_clone:
         params["ref"] = file_digest(ref_audio)
         params["ref_text"] = ref_text
     digest = cache_hash(params)
@@ -176,13 +226,24 @@ def generate_one(
                 join_audio=True,
                 verbose=False,
             )
-            # Named speaker only for the Qwen CustomVoice models. Fish clones from
-            # the uploaded reference clip; the Qwen Base mode has no named speaker
-            # and falls back to its own default timbre.
+            # Named speaker only for the Qwen CustomVoice models. Both Fish and
+            # Qwen-Base cloning speak in the voice of the uploaded reference clip.
             if fish:
                 if SUPPORTS_REF and ref_audio:
                     base_kwargs["ref_audio"] = ref_audio
                 if SUPPORTS_REF_TEXT and ref_text:
+                    base_kwargs["ref_text"] = ref_text
+            elif qwen_clone:
+                # Qwen Base cloning: condition on the reference clip + its
+                # transcript, with NO named speaker and NO style instruction — the
+                # model requires voice=None and instruct=None when a reference is
+                # supplied (see Qwen3TTS.supports_tts_batch).
+                if SUPPORTS_REF:
+                    base_kwargs["ref_audio"] = ref_audio
+                # Always pass ref_text, even "" — leaving it unset makes mlx_audio
+                # fetch a separate STT model over the network to transcribe the
+                # clip. "" simply skips the ICL text prior (timbre still clones).
+                if SUPPORTS_REF_TEXT:
                     base_kwargs["ref_text"] = ref_text
             elif not cloning:
                 base_kwargs["voice"] = voice
@@ -191,7 +252,8 @@ def generate_one(
             # Qwen is Chinese-only (force zh); Fish is multilingual — let it detect.
             if SUPPORTS_LANG and not fish:
                 base_kwargs["lang_code"] = LANG
-            if SUPPORTS_INSTRUCT and eff_instruct and not fish:
+            # Style/instruct is only for the Qwen CustomVoice (named-speaker) path.
+            if SUPPORTS_INSTRUCT and eff_instruct and not fish and not qwen_clone:
                 base_kwargs["instruct"] = eff_instruct
 
             # Long text is synthesized in sentence-sized chunks so a single

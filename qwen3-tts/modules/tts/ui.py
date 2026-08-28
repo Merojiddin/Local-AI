@@ -27,6 +27,7 @@ from .config import (
     SUPPORTS_INSTRUCT,
     VOICES,
     active_repo,
+    clone_active,
     is_fish,
     needs_load,
 )
@@ -170,7 +171,7 @@ def build_tts_tab(lang_component, settings: dict):
         # full width.
         with gr.Row(equal_height=True, elem_id="tts-main"):
             # ---- Column 1: Text ----
-            with gr.Column(scale=5, elem_id="tts-col-text"):
+            with gr.Column(scale=5, min_width=280, elem_id="tts-col-text"):
                 with gr.Group(elem_classes="tts-panel"):
                     sec_text = gr.Markdown(tr(L0, "sec_text"), elem_classes="section-head")
                     text = gr.Textbox(
@@ -181,7 +182,7 @@ def build_tts_tab(lang_component, settings: dict):
                     )
 
             # ---- Column 2: Pronunciation ----
-            with gr.Column(scale=4):
+            with gr.Column(scale=4, min_width=280):
                 with gr.Group(elem_classes="tts-panel"):
                     sec_pron = gr.Markdown(tr(L0, "sec_pron"), elem_classes="section-head")
                     mode = gr.Radio(choices=mode_choices(L0), value=DEFAULT_MODE, label=tr(L0, "mode"))
@@ -204,14 +205,14 @@ def build_tts_tab(lang_component, settings: dict):
                         p_between = gr.Slider(0, 2, value=0.3, step=0.05, label=tr(L0, "p_between"))
 
             # ---- Column 3: Voice & Model (+ Output) ----
-            with gr.Column(scale=4):
+            with gr.Column(scale=4, min_width=280):
                 with gr.Group(elem_classes="tts-panel"):
                     sec_voice = gr.Markdown(tr(L0, "sec_voice"), elem_classes="section-head")
                     model_label = gr.Radio(
                         choices=model_choices(L0), value=default_model, label=tr(L0, "model")
                     )
                     ms.build_selector("tts_voice_mode")
-                    is_clone0 = default_model == FISH_LABEL
+                    is_clone0 = clone_active(default_model)
                     voice = gr.Radio(
                         choices=VOICES, value=DEFAULT_VOICE, label=tr(L0, "voice"),
                         visible=not is_clone0,
@@ -236,9 +237,11 @@ def build_tts_tab(lang_component, settings: dict):
                             storage.save_settings(s)
 
                     def _toggle_clone(label: str):
-                        """Swap the visible controls when the model changes: named-voice
-                        picker for Qwen, reference-clip uploader for Fish S2 Pro."""
-                        clone = is_fish(label)
+                        """Swap the visible controls: named-voice picker vs the
+                        reference-clip uploader. The uploader shows for Fish (always
+                        clones) and for a Qwen size when Voice mode is "Clone a
+                        voice" — see clone_active()."""
+                        clone = clone_active(label)
                         return (
                             gr.update(visible=not clone),  # voice
                             gr.update(visible=clone),      # ref_audio
@@ -253,26 +256,41 @@ def build_tts_tab(lang_component, settings: dict):
                         outputs=[voice, ref_audio, ref_text, clone_note],
                         show_progress="hidden",
                     )
-                with gr.Group(elem_classes="tts-panel"):
-                    sec_out = gr.Markdown(tr(L0, "sec_out"), elem_classes="section-head")
-                    with gr.Row():
-                        out_format = gr.Radio(
-                            choices=FORMATS, value=DEFAULT_FORMAT, label=tr(L0, "format"), scale=2
-                        )
-                        quality = gr.Radio(
-                            choices=QUALITIES, value=DEFAULT_QUALITY, label=tr(L0, "quality"), scale=3
-                        )
+                    # The Voice-mode card ("Built-in voices" / "Clone a voice") is
+                    # saved through the shared selector bridge, not an ordinary
+                    # Gradio input, so react to it there: re-run the same toggle so
+                    # flipping to "Clone a voice" reveals the uploader for Qwen too.
+                    ms.add_bridge_reactor(
+                        inputs=[model_label],
+                        outputs=[voice, ref_audio, ref_text, clone_note],
+                        fn=lambda data, label: (
+                            _toggle_clone(label)
+                            if data.get("cat") == "tts_voice_mode"
+                            else (gr.update(), gr.update(), gr.update(), gr.update())
+                        ),
+                    )
 
-        # ---- Action bar: generate · preview · download — full width below ----
+        # ---- Action bar: generate · output · preview · download — full width.
+        # Output format rides here rather than in the Voice column so the three
+        # columns stay short enough to clear a laptop viewport.
         with gr.Row(equal_height=True, elem_id="tts-actions"):
             generate_btn = gr.Button(
                 tr(L0, "generate"), variant="primary", scale=0,
-                min_width=210, elem_id="tts-generate",
+                min_width=200, elem_id="tts-generate",
             )
+            with gr.Column(scale=0, min_width=330, elem_id="tts-output-inline"):
+                sec_out = gr.Markdown(tr(L0, "sec_out"), elem_classes="section-head")
+                with gr.Row():
+                    out_format = gr.Radio(
+                        choices=FORMATS, value=DEFAULT_FORMAT, label=tr(L0, "format"), scale=2
+                    )
+                    quality = gr.Radio(
+                        choices=QUALITIES, value=DEFAULT_QUALITY, label=tr(L0, "quality"), scale=3
+                    )
             audio_out = gr.Audio(
                 label=tr(L0, "audio"), type="filepath", elem_id="tts-audio", scale=4
             )
-            with gr.Column(scale=2, min_width=210, elem_id="tts-result-col"):
+            with gr.Column(scale=2, min_width=200, elem_id="tts-result-col"):
                 file_out = gr.DownloadButton(tr(L0, "download"), size="sm")
                 info_out = gr.Markdown(elem_classes="result-info")
 
@@ -338,7 +356,7 @@ def build_tts_tab(lang_component, settings: dict):
                     )
 
                     def _toggle_bclone(label: str):
-                        clone = is_fish(label)
+                        clone = clone_active(label)
                         return (
                             gr.update(visible=not clone),  # b_voice
                             gr.update(visible=clone),      # b_ref_audio
@@ -349,6 +367,15 @@ def build_tts_tab(lang_component, settings: dict):
                         _toggle_bclone, inputs=[b_model],
                         outputs=[b_voice, b_ref_audio, b_ref_text],
                         show_progress="hidden",
+                    )
+                    ms.add_bridge_reactor(
+                        inputs=[b_model],
+                        outputs=[b_voice, b_ref_audio, b_ref_text],
+                        fn=lambda data, label: (
+                            _toggle_bclone(label)
+                            if data.get("cat") == "tts_voice_mode"
+                            else (gr.update(), gr.update(), gr.update())
+                        ),
                     )
                     with gr.Accordion(tr(L0, "acc_adv"), open=False) as b_acc_adv:
                         with gr.Row():

@@ -169,24 +169,58 @@ fieldset.block { gap: 2px !important; }
 /* ---- TTS single tab: three-column workspace that fits one window ---- */
 #tts-main { align-items: stretch; gap: 10px !important; }
 #tts-main > .column { gap: 6px !important; }
-.tts-panel { height: 100%; display: flex; flex-direction: column; }
-/* Text column: the textarea grows to fill the tallest sibling column. */
-#tts-col-text, #tts-col-text > *, #tts-col-text .tts-panel { height: 100%; }
-#tts-text { flex: 1 1 auto; display: flex; flex-direction: column; }
-#tts-text label { flex: 1 1 auto; display: flex; flex-direction: column; }
-#tts-text textarea {
-  flex: 1 1 auto; min-height: 300px !important; height: 100% !important; resize: none;
+.tts-panel { height: 100%; }
+#tts-main .tts-panel { padding: 4px 8px !important; }
+/* Text column: the textarea grows to fill the tallest sibling column. Don't set
+   an explicit height on the column itself — that would cancel the row's
+   align-items:stretch. Let it stretch, then fill down through the wrappers. */
+#tts-col-text > * { height: 100%; }
+#tts-col-text .tts-panel,
+#tts-col-text .tts-panel > .styler {
+  display: flex; flex-direction: column; min-height: 0;
 }
-/* Keep the reference-clip player from towering in clone mode. */
+#tts-col-text .tts-panel > .styler { flex: 1 1 auto; }
+#tts-text {
+  flex: 1 1 auto !important; min-height: 0 !important;
+  display: flex; flex-direction: column;
+}
+#tts-text > label { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+#tts-text textarea {
+  flex: 1 1 auto !important; height: 100% !important;
+  min-height: 240px !important; resize: none; box-sizing: border-box;
+}
+/* Keep the reference-clip uploader/player from towering in clone mode: the
+   upload drop zone is a .boundedheight button that defaults to ~240px. */
 #tts-ref-audio, #tts-ref-audio .component-wrap { min-height: 0 !important; }
 #tts-ref-audio .empty { min-height: 44px !important; }
 #tts-ref-audio .waveform-container { min-height: 0 !important; }
+#tts-ref-audio .audio-container button.boundedheight { min-height: 76px !important; }
+#tts-ref-audio .audio-container .wrap { min-height: 0 !important; }
+#tts-ref-audio .audio-container button.boundedheight .icon-wrap { margin-bottom: 0 !important; }
 
-/* ---- action bar: generate · preview · download ---- */
+/* Trim vertical bulk in the Voice & Model column so the whole tab clears a
+   laptop viewport. */
+#tts-main .ms-section { margin: 1px 0 3px !important; }
+#tts-main .ms-card { padding: 4px 10px !important; }
+#tts-main .ms-chip { margin-bottom: 3px !important; }
+#tts-main .ms-hint { margin-top: 2px !important; }
+#tts-main .hint-text p { font-size: 0.72rem !important; line-height: 1.34 !important; margin: 2px 0 0 !important; }
+
+/* ---- action bar: generate · output · preview · download ---- */
 #tts-actions { align-items: center; gap: 10px !important; margin: 6px 0 4px; }
-#tts-generate { min-height: 54px; font-size: 0.95rem !important; align-self: stretch; }
+#tts-generate { height: 60px; min-height: 60px; font-size: 0.95rem !important; }
 #tts-result-col { justify-content: center; gap: 4px !important; }
 #tts-actions #tts-audio .empty { min-height: 44px !important; }
+#tts-actions #tts-audio { min-height: 0 !important; }
+/* inline Output (format + quality) — compact card so it rides the action bar */
+#tts-output-inline {
+  border: 1px solid var(--chang-line); border-radius: 10px;
+  background: #FFFDF8; padding: 3px 10px 4px !important; gap: 0 !important;
+  align-self: center;
+}
+#tts-output-inline .section-head p { margin-bottom: 2px !important; }
+#tts-output-inline .form, #tts-output-inline fieldset.block { gap: 1px !important; }
+#tts-output-inline label[data-testid$="-radio-label"] { padding: 1px 8px !important; }
 
 /* ---- library: header icon buttons + per-row file list ---- */
 #lib-head { align-items: center; gap: 4px !important; }

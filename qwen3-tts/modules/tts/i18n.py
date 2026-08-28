@@ -23,9 +23,10 @@ T = {
         "ref_text": "Reference transcript (optional)",
         "ref_text_ph": "Type what is said in the reference clip — improves cloning",
         "clone_note": (
-            "🎭 **Fish S2 Pro** clones the uploaded voice. Steer emotion with inline "
-            "tags in your text, e.g. `[happy]`, `[whisper]`, `[shout]`. Voice/style "
-            "presets above don't apply to this model."
+            "🎭 **Voice cloning** speaks your text in the uploaded voice. A short "
+            "transcript above improves the match (leave it blank and Whisper fills "
+            "it in). Emotion tags like `[happy]`, `[whisper]` work with **Fish S2 "
+            "Pro** only; the voice/style presets don't apply while cloning."
         ),
         "voice": "Voice",
         "sec_pron": "🔊 **Pronunciation**",
@@ -91,9 +92,10 @@ T = {
         "ref_text": "Lời thoại của mẫu (tuỳ chọn)",
         "ref_text_ph": "Nhập nội dung nói trong mẫu — giúp nhân bản chính xác hơn",
         "clone_note": (
-            "🎭 **Fish S2 Pro** nhân bản giọng đã tải lên. Điều khiển cảm xúc bằng thẻ "
-            "trong văn bản, ví dụ `[happy]`, `[whisper]`, `[shout]`. Các thiết lập giọng/"
-            "phong cách ở trên không áp dụng cho mô hình này."
+            "🎭 **Nhân bản giọng** đọc văn bản bằng giọng đã tải lên. Thêm lời thoại ở "
+            "trên để khớp tốt hơn (bỏ trống thì Whisper sẽ tự điền). Thẻ cảm xúc như "
+            "`[happy]`, `[whisper]` chỉ dùng cho **Fish S2 Pro**; các thiết lập giọng/"
+            "phong cách không áp dụng khi nhân bản."
         ),
         "voice": "Giọng đọc",
         "sec_pron": "🔊 **Phát âm**",
@@ -159,8 +161,9 @@ T = {
         "ref_text": "参考文本（可选）",
         "ref_text_ph": "输入参考片段中所说的内容 — 可提升克隆效果",
         "clone_note": (
-            "🎭 **Fish S2 Pro** 会克隆上传的声音。用文本中的标签控制情感，例如 "
-            "`[happy]`、`[whisper]`、`[shout]`。上方的声音/风格设置对该模型无效。"
+            "🎭 **声音克隆**会用上传的声音朗读你的文本。填写上方的参考文本可提升克隆效果"
+            "（留空则由 Whisper 自动转写）。`[happy]`、`[whisper]` 等情感标签仅适用于 "
+            "**Fish S2 Pro**；克隆时上方的声音/风格设置无效。"
         ),
         "voice": "声音",
         "sec_pron": "🔊 **发音设置**",
