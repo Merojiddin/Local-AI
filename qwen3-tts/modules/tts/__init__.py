@@ -76,6 +76,13 @@ from .library import (
     ui_files_refresh,
     ui_lib_event,
 )
+from .voices import (
+    delete_voice,
+    get_voice,
+    list_voices,
+    save_voice,
+    voice_names,
+)
 from .ui import build_tts_tab, ui_batch, ui_generate
 
 __all__ = [
@@ -113,4 +120,9 @@ __all__ = [
     "lib_html",
     "ui_generate",
     "ui_batch",
+    "list_voices",
+    "voice_names",
+    "get_voice",
+    "save_voice",
+    "delete_voice",
 ]

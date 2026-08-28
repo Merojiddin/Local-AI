@@ -220,7 +220,12 @@ fieldset.block { gap: 2px !important; }
 }
 #tts-output-inline .section-head p { margin-bottom: 2px !important; }
 #tts-output-inline .form, #tts-output-inline fieldset.block { gap: 1px !important; }
-#tts-output-inline label[data-testid$="-radio-label"] { padding: 1px 8px !important; }
+#tts-output-inline label[data-testid$="-radio-label"] {
+  padding: 2px 7px !important; white-space: nowrap !important;
+}
+/* keep Format | Quality side-by-side, pills on one line each */
+#tts-output-row { flex-wrap: nowrap !important; gap: 8px !important; }
+#tts-output-inline fieldset.block .wrap { flex-wrap: nowrap !important; }
 
 /* ---- library: header icon buttons + per-row file list ---- */
 #lib-head { align-items: center; gap: 4px !important; }

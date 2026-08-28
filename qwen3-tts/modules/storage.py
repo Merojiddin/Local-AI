@@ -24,6 +24,7 @@ DEFAULT_SETTINGS = {
     "indexes_dir": "data/indexes",
     "collections_dir": "data/collections",
     "generator_dir": "data/generator_projects",
+    "voices_dir": "data/voices",
     "default_tts_model": "Higher Quality — Qwen3-TTS 1.7B",
     # Per-category model selections (see modules/model_select.py). Values are
     # registry keys from models.json; unknown values fall back to these
@@ -96,6 +97,14 @@ def collections_dir() -> Path:
 
 def generator_dir() -> Path:
     p = _resolve(load_settings()["generator_dir"])
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def voices_dir() -> Path:
+    """Saved voice-clone profiles (reference clip + transcript). User data, kept
+    separate from the cache so it survives a cache clear or model removal."""
+    p = _resolve(load_settings()["voices_dir"])
     p.mkdir(parents=True, exist_ok=True)
     return p
 

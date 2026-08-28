@@ -34,6 +34,7 @@ from .config import (
 from .i18n import DEFAULT_LANG, mode_choices, model_choices, tr
 from .engine import generate_one, parse_batch, to_friendly_error
 from .library import lib_html, ui_files_refresh, ui_lib_event
+from . import voices as vx
 
 
 # --------------------------------------------------------------------------- #
@@ -143,6 +144,45 @@ def ui_batch(
 
 
 # --------------------------------------------------------------------------- #
+# Saved voice-clone profiles (persist the loaded reference clip + transcript)
+# --------------------------------------------------------------------------- #
+def ui_save_voice(name, ref_audio, ref_text, lang=DEFAULT_LANG):
+    """Persist the currently loaded clip under a name and refresh the picker."""
+    try:
+        v = vx.save_voice(name, ref_audio, ref_text)
+    except Exception as exc:  # noqa: BLE001 - surfaced to the user
+        raise gr.Error(to_friendly_error(exc))
+    return (
+        gr.update(choices=vx.voice_names(), value=v["name"]),  # saved_voice
+        gr.update(value=""),                                   # voice_name (clear)
+        tr(lang, "saved_ok").format(name=v["name"]),           # saved_status
+    )
+
+
+def ui_load_voice(name, lang=DEFAULT_LANG):
+    """Load a saved profile back into the reference-clip + transcript boxes."""
+    v = vx.get_voice(name)
+    if not v:
+        return gr.update(), gr.update(), tr(lang, "pick_first")
+    return (
+        gr.update(value=v["path"]),                # ref_audio
+        gr.update(value=v.get("ref_text", "")),    # ref_text
+        tr(lang, "loaded_ok").format(name=v["name"]),
+    )
+
+
+def ui_delete_voice(name, lang=DEFAULT_LANG):
+    """Delete a saved profile and refresh the picker."""
+    if not name:
+        return gr.update(), tr(lang, "pick_first")
+    vx.delete_voice(name)
+    return (
+        gr.update(choices=vx.voice_names(), value=None),  # saved_voice
+        tr(lang, "deleted_ok").format(name=name),         # saved_status
+    )
+
+
+# --------------------------------------------------------------------------- #
 # UI — built inside the host app's "TTS" tab. Returns the i18n machinery so
 # the host can wire the global language switch.
 # --------------------------------------------------------------------------- #
@@ -230,6 +270,39 @@ def build_tts_tab(lang_component, settings: dict):
                         tr(L0, "clone_note"), visible=is_clone0, elem_classes="hint-text"
                     )
 
+                    # Persist a loaded clone so it survives the session: save the
+                    # uploaded clip + transcript under a name, then reload it from
+                    # the dropdown next time instead of re-uploading. The whole
+                    # group toggles with the clone controls above.
+                    with gr.Group(visible=is_clone0) as saved_voice_group:
+                        saved_head = gr.Markdown(
+                            tr(L0, "saved_head"), elem_classes="section-head"
+                        )
+                        with gr.Row():
+                            saved_voice = gr.Dropdown(
+                                choices=vx.voice_names(), value=None,
+                                label=tr(L0, "saved_pick"), scale=4, min_width=140,
+                                filterable=False,
+                            )
+                            load_voice_btn = gr.Button(
+                                tr(L0, "load_voice"), size="sm", scale=0, min_width=90,
+                            )
+                            delete_voice_btn = gr.Button(
+                                "🗑", size="sm", scale=0, min_width=44,
+                                elem_classes="icon-btn",
+                            )
+                        with gr.Row():
+                            voice_name = gr.Textbox(
+                                label=tr(L0, "save_as"), placeholder=tr(L0, "save_as_ph"),
+                                scale=4, min_width=140, max_lines=1,
+                            )
+                            save_voice_btn = gr.Button(
+                                tr(L0, "save_voice"), size="sm", scale=0, min_width=90,
+                            )
+                        saved_status = gr.Markdown(
+                            tr(L0, "saved_hint"), elem_classes="hint-text"
+                        )
+
                     def _persist_model(label: str) -> None:
                         if label in MODELS:
                             s = storage.load_settings()
@@ -247,13 +320,14 @@ def build_tts_tab(lang_component, settings: dict):
                             gr.update(visible=clone),      # ref_audio
                             gr.update(visible=clone),      # ref_text
                             gr.update(visible=clone),      # clone_note
+                            gr.update(visible=clone),      # saved_voice_group
                         )
 
                     model_label.change(_persist_model, inputs=[model_label],
                                        show_progress="hidden")
                     model_label.change(
                         _toggle_clone, inputs=[model_label],
-                        outputs=[voice, ref_audio, ref_text, clone_note],
+                        outputs=[voice, ref_audio, ref_text, clone_note, saved_voice_group],
                         show_progress="hidden",
                     )
                     # The Voice-mode card ("Built-in voices" / "Clone a voice") is
@@ -262,12 +336,31 @@ def build_tts_tab(lang_component, settings: dict):
                     # flipping to "Clone a voice" reveals the uploader for Qwen too.
                     ms.add_bridge_reactor(
                         inputs=[model_label],
-                        outputs=[voice, ref_audio, ref_text, clone_note],
+                        outputs=[voice, ref_audio, ref_text, clone_note, saved_voice_group],
                         fn=lambda data, label: (
                             _toggle_clone(label)
                             if data.get("cat") == "tts_voice_mode"
-                            else (gr.update(), gr.update(), gr.update(), gr.update())
+                            else (gr.update(), gr.update(), gr.update(), gr.update(), gr.update())
                         ),
+                    )
+
+                    save_voice_btn.click(
+                        ui_save_voice,
+                        inputs=[voice_name, ref_audio, ref_text, lang_component],
+                        outputs=[saved_voice, voice_name, saved_status],
+                        show_progress="hidden",
+                    )
+                    load_voice_btn.click(
+                        ui_load_voice,
+                        inputs=[saved_voice, lang_component],
+                        outputs=[ref_audio, ref_text, saved_status],
+                        show_progress="hidden",
+                    )
+                    delete_voice_btn.click(
+                        ui_delete_voice,
+                        inputs=[saved_voice, lang_component],
+                        outputs=[saved_voice, saved_status],
+                        show_progress="hidden",
                     )
 
         # ---- Action bar: generate · output · preview · download — full width.
@@ -278,14 +371,18 @@ def build_tts_tab(lang_component, settings: dict):
                 tr(L0, "generate"), variant="primary", scale=0,
                 min_width=200, elem_id="tts-generate",
             )
-            with gr.Column(scale=0, min_width=330, elem_id="tts-output-inline"):
+            with gr.Column(scale=0, min_width=530, elem_id="tts-output-inline"):
                 sec_out = gr.Markdown(tr(L0, "sec_out"), elem_classes="section-head")
-                with gr.Row():
+                with gr.Row(elem_id="tts-output-row"):
+                    # Labels hidden — MP3/WAV and the kbps values are self-evident,
+                    # and dropping them keeps the whole card to a single pill row.
                     out_format = gr.Radio(
-                        choices=FORMATS, value=DEFAULT_FORMAT, label=tr(L0, "format"), scale=2
+                        choices=FORMATS, value=DEFAULT_FORMAT, label=tr(L0, "format"),
+                        show_label=False, scale=2, min_width=100,
                     )
                     quality = gr.Radio(
-                        choices=QUALITIES, value=DEFAULT_QUALITY, label=tr(L0, "quality"), scale=3
+                        choices=QUALITIES, value=DEFAULT_QUALITY, label=tr(L0, "quality"),
+                        show_label=False, scale=3, min_width=230,
                     )
             audio_out = gr.Audio(
                 label=tr(L0, "audio"), type="filepath", elem_id="tts-audio", scale=4
