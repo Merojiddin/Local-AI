@@ -38,6 +38,7 @@ from .audio import (
     concat_wavs,
     make_silence,
     normalize_wav_loud,
+    stretch_silences,
     to_mp3,
 )
 from .chunking import (
@@ -287,15 +288,15 @@ def generate_one(
 
             # Long text is synthesized in sentence-sized chunks so a single
             # over-long generation can't hit the token cap and trail off into
-            # silence. Chunks also end wherever the user asked for a pause, so
-            # the silence can be spliced in at exactly that punctuation mark.
+            # silence. Only a paragraph break additionally forces a split, so
+            # the gap can be spliced in at exactly that line break; sentence and
+            # clause pauses are applied to the finished audio instead (below),
+            # keeping an essay to a handful of long, prosodically continuous
+            # generations rather than one short take per sentence.
             # Each chunk is written as seg000.wav, seg001.wav, … and joined
             # below in reading order with its gap.
             chunk_chars = FISH_MAX_CHUNK_CHARS if fish else MAX_CHUNK_CHARS
-            segments = split_with_pauses(
-                text, chunk_chars,
-                sentence=p_sentence, comma=p_comma, paragraph=p_paragraph,
-            )
+            segments = split_with_pauses(text, chunk_chars, paragraph=p_paragraph)
             produced: list[tuple[Path, float]] = []
             for idx, (chunk, gap) in enumerate(segments):
                 if len(segments) > 1:
@@ -336,15 +337,22 @@ def generate_one(
             # — otherwise the model's quiet native output leaves short clips far
             # quieter than the loudness-matched long ones.
             #
-            # Between the pieces goes the punctuation silence the splitter asked
-            # for. It is inserted here, after normalisation, so it stays true
-            # silence: loudnorm on a piece that already ended in a long gap would
-            # pull the gap's noise floor up with the speech.
+            # Each piece then has its own pauses stretched: the gaps the model
+            # already left at sentence ends are padded out to the requested
+            # length. This runs after loudnorm (which would otherwise pull a long
+            # gap's noise floor up with the speech) and before the paragraph
+            # silence is spliced between pieces, so an inserted paragraph gap is
+            # never itself re-detected and stretched again.
             _tick(0.88, "prog_join")
             body_parts: list[Path] = []
             for i, (p, gap) in enumerate(produced):
                 np_ = tdp / f"n{i}.wav"
                 normalize_wav_loud(p, np_)
+                if p_sentence > 0 or p_comma > 0:
+                    st = tdp / f"t{i}.wav"
+                    stretch_silences(np_, st, tdp, f"w{i}_",
+                                     sentence=p_sentence, comma=p_comma)
+                    np_ = st
                 body_parts.append(np_)
                 if gap > 0 and i < len(produced) - 1:
                     s = tdp / f"g{i}.wav"

@@ -41,19 +41,19 @@ FISH_MAX_TOKENS = 480
 # Punctuation pauses
 # --------------------------------------------------------------------------- #
 # The model decides its own phrasing inside a single generation, and on long
-# input it routinely runs two sentences together with no breath between them.
-# Rather than fight the model, the boundary is made explicit: text is cut at the
-# punctuation the user wants a pause on, each side is generated separately, and
-# real silence is spliced in at the seam (see engine.generate_one).
+# input it leaves only a short breath between sentences — sometimes none at all.
 #
-# The cost is that a pause boundary is also a generation boundary, so prosody
-# restarts there. That is the right trade for teaching audio — a clean sentence
-# break beats continuous narration — but it is why every pause defaults low and
-# can be dialled to 0, which restores the old behaviour exactly: with all three
-# at 0 no boundary is forced and chunking is purely size-driven again.
-DEFAULT_PAUSE_SENTENCE = 0.35    # after 。！？；…
-DEFAULT_PAUSE_COMMA = 0.0        # after ，、：  (off: comma breaks hurt flow most)
-DEFAULT_PAUSE_PARAGRAPH = 0.7    # at a line break
+# Sentence and clause pauses are therefore NOT applied here: cutting the text at
+# every full stop would make each sentence its own generation and restart the
+# prosody at every boundary. Instead the finished audio is measured and the gaps
+# the model already produced are padded out to the requested length
+# (audio.stretch_silences), which adds no generations and cannot drop speech.
+#
+# Only a paragraph break still splits the text, because a line break is
+# structural, rare, and its silence has to be created rather than lengthened.
+DEFAULT_PAUSE_SENTENCE = 0.5     # minimum gap at 。！？；…
+DEFAULT_PAUSE_COMMA = 0.0        # off by default: over-pausing at ，、 hurts flow
+DEFAULT_PAUSE_PARAGRAPH = 0.7    # inserted at a line break
 MAX_PAUSE = 3.0
 
 # Full-width punctuation is unambiguous — in CJK text it is always a boundary.

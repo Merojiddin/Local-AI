@@ -215,6 +215,93 @@ def test_chunk_max_tokens_bounds():
     )
 
 
+def _tone_gap_wav(dst, gaps):
+    """tone(1s) [gap tone(1s)]... — synthetic speech with known silent gaps."""
+    import subprocess
+    ins, filt, n = [], [], 0
+    ins += ["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=24000:duration=1"]
+    labels = ["[0]"]
+    for i, g in enumerate(gaps):
+        ins += ["-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono"]
+        n += 1
+        filt.append(f"[{n}]atrim=duration={g}[g{i}]")
+        labels.append(f"[g{i}]")
+        ins += ["-f", "lavfi", "-i", f"sine=frequency=520:sample_rate=24000:duration=1"]
+        n += 1
+        labels.append(f"[{n}]")
+    graph = ";".join(filt + ["".join(labels) + f"concat=n={len(labels)}:v=0:a=1[o]"])
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *ins,
+                    "-filter_complex", graph, "-map", "[o]", "-ac", "1",
+                    "-ar", "24000", "-c:a", "pcm_s16le", str(dst)], check=True)
+
+
+def test_stretch_silences_is_additive():
+    """The whole point of stretching instead of splitting: it may only ADD
+    silence, never remove a sample of speech."""
+    import tempfile
+    from modules.tts.audio import (detect_silences, stretch_silences,
+                                   wav_duration, SILENCE_SENT_MIN)
+    if not tts.FFMPEG:
+        check("ffmpeg present for stretch tests", False, "ffmpeg missing")
+        return
+
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        src = td / "src.wav"
+        # 0.45s reads as a sentence gap, 0.15s as a clause gap.
+        _tone_gap_wav(src, [0.45, 0.15])
+        d0 = wav_duration(src)
+        speech0 = d0 - sum(b - a for a, b in detect_silences(src))
+
+        out = td / "out.wav"
+        n = stretch_silences(src, out, td, "t_", sentence=0.9, comma=0.0)
+        d1 = wav_duration(out)
+        speech1 = d1 - sum(b - a for a, b in detect_silences(out))
+        check("only the sentence gap stretched", n == 1, f"stretched {n}")
+        check("duration grew by the shortfall", abs((d1 - d0) - (0.9 - 0.45)) < 0.05,
+              f"{d0:.2f} -> {d1:.2f}")
+        check("no speech lost", abs(speech1 - speech0) < 0.03,
+              f"{speech0:.2f} -> {speech1:.2f}")
+
+        # Clause pause on: both gaps come up to their floors.
+        out2 = td / "out2.wav"
+        n2 = stretch_silences(src, out2, td, "u_", sentence=0.9, comma=0.4)
+        speech2 = wav_duration(out2) - sum(b - a for a, b in detect_silences(out2))
+        check("both gaps stretched", n2 == 2, f"stretched {n2}")
+        check("no speech lost with clause pauses", abs(speech2 - speech0) < 0.03,
+              f"{speech0:.2f} -> {speech2:.2f}")
+
+        # A pause already longer than the target is left alone.
+        out3 = td / "out3.wav"
+        n3 = stretch_silences(src, out3, td, "v_", sentence=0.2, comma=0.0)
+        check("already-long pause untouched", n3 == 0, f"stretched {n3}")
+        check("untouched file is identical length",
+              abs(wav_duration(out3) - d0) < 0.01)
+
+        # Leading/trailing silence is the caller's pad, never stretched.
+        pad = td / "pad.wav"
+        import subprocess
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                        "-i", str(src), "-af", "adelay=500|500,apad=pad_dur=0.5",
+                        "-ac", "1", "-ar", "24000", "-c:a", "pcm_s16le", str(pad)],
+                       check=True)
+        out4 = td / "out4.wav"
+        n4 = stretch_silences(pad, out4, td, "w_", sentence=0.9, comma=0.0)
+        check("edge silence not counted", n4 == 1, f"stretched {n4}")
+
+
+def test_sentence_pauses_do_not_split_text():
+    """Sentence/clause pauses must not add generations any more — only a
+    paragraph break splits, because its silence has to be created."""
+    t = "第一句话。第二句话。第三句话。"
+    check("sentence pause alone -> one chunk",
+          len(tts.split_with_pauses(t, paragraph=0.0)) == 1,
+          f"got {tts.split_with_pauses(t, paragraph=0.0)}")
+    segs = tts.split_with_pauses("第一段。\n第二段。", paragraph=0.7)
+    check("line break still splits", [c for c, _ in segs] == ["第一段。", "第二段。"], f"got {segs}")
+    check("line break carries the gap", segs[0][1] == 0.7, f"got {segs}")
+
+
 def test_fish_routing():
     # Fish is recognised and routes to its single repo regardless of voice mode.
     check("is_fish true for Fish label", tts.is_fish(tts.FISH_LABEL))
