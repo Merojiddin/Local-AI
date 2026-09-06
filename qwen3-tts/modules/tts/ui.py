@@ -62,8 +62,8 @@ def ui_generate(
     status = tr(lang, "res_cached") if res["cached"] else tr(lang, "res_new")
     gen_time = "0.0s" if res["cached"] else f"{res['gen_time']:.1f}s"
     info = (
-        f"{status} · **{MODEL_SHORT[res['repo']]}** · {res['voice']} · {gen_time}\n\n"
-        f"**{tr(lang, 'res_file')}:** `{path}`"
+        f"{status} · **{MODEL_SHORT[res['repo']]}** · {res['voice']} · {gen_time}<br>"
+        f"**{tr(lang, 'res_file')}:** `{res['path'].name}`"
     )
     return path, path, info
 
@@ -209,6 +209,8 @@ def build_tts_tab(lang_component, settings: dict):
         # whole workspace is visible at once instead of stacking into one tall
         # scroll. The action bar (generate + preview) and the library sit below,
         # full width.
+        is_clone0 = clone_active(default_model)
+
         with gr.Row(equal_height=True, elem_id="tts-main"):
             # ---- Column 1: Text ----
             with gr.Column(scale=5, min_width=280, elem_id="tts-col-text"):
@@ -217,19 +219,19 @@ def build_tts_tab(lang_component, settings: dict):
                     text = gr.Textbox(
                         label=tr(L0, "text_label"),
                         placeholder=tr(L0, "text_ph"),
-                        lines=15, max_lines=24,
+                        lines=6, max_lines=20,
                         elem_id="tts-text",
                     )
 
-            # ---- Column 2: Pronunciation ----
+            # ---- Column 2: Pronunciation (+ saved voices) ----
             with gr.Column(scale=4, min_width=280):
-                with gr.Group(elem_classes="tts-panel"):
+                with gr.Group(elem_classes="tts-panel", elem_id="tts-pron"):
                     sec_pron = gr.Markdown(tr(L0, "sec_pron"), elem_classes="section-head")
                     mode = gr.Radio(choices=mode_choices(L0), value=DEFAULT_MODE, label=tr(L0, "mode"))
                     style = gr.Textbox(
                         label=tr(L0, "style"),
                         placeholder=tr(L0, "style_ph"),
-                        lines=2,
+                        lines=1, max_lines=3,
                         interactive=SUPPORTS_INSTRUCT,
                     )
                     with gr.Accordion(tr(L0, "acc_examples"), open=False, visible=show_adv) as acc_examples:
@@ -244,6 +246,41 @@ def build_tts_tab(lang_component, settings: dict):
                         p_after = gr.Slider(0, 2, value=0.0, step=0.05, label=tr(L0, "p_after"))
                         p_between = gr.Slider(0, 2, value=0.3, step=0.05, label=tr(L0, "p_between"))
 
+                # Saved clone voices sit under Pronunciation, not next to the
+                # uploader that fills them: the Voice column is by far the
+                # tallest, and splitting the two keeps the whole tab inside one
+                # window. The group still toggles with the clone controls.
+                with gr.Group(
+                    visible=is_clone0, elem_classes="tts-panel", elem_id="tts-saved"
+                ) as saved_voice_group:
+                    saved_head = gr.Markdown(
+                        tr(L0, "saved_head"), elem_classes="section-head"
+                    )
+                    with gr.Row():
+                        saved_voice = gr.Dropdown(
+                            choices=vx.voice_names(), value=None,
+                            label=tr(L0, "saved_pick"), scale=4, min_width=120,
+                            filterable=False, container=False,
+                        )
+                        load_voice_btn = gr.Button(
+                            tr(L0, "load_voice"), size="sm", scale=0, min_width=84,
+                        )
+                        delete_voice_btn = gr.Button(
+                            "🗑", size="sm", scale=0, min_width=40,
+                            elem_classes="icon-btn",
+                        )
+                    with gr.Row():
+                        voice_name = gr.Textbox(
+                            label=tr(L0, "save_as"), placeholder=tr(L0, "save_as"),
+                            scale=4, min_width=120, max_lines=1, container=False,
+                        )
+                        save_voice_btn = gr.Button(
+                            tr(L0, "save_voice"), size="sm", scale=0, min_width=84,
+                        )
+                    saved_status = gr.Markdown(
+                        tr(L0, "saved_hint"), elem_classes="hint-text"
+                    )
+
             # ---- Column 3: Voice & Model (+ Output) ----
             with gr.Column(scale=4, min_width=280):
                 with gr.Group(elem_classes="tts-panel"):
@@ -252,7 +289,6 @@ def build_tts_tab(lang_component, settings: dict):
                         choices=model_choices(L0), value=default_model, label=tr(L0, "model")
                     )
                     ms.build_selector("tts_voice_mode")
-                    is_clone0 = clone_active(default_model)
                     voice = gr.Radio(
                         choices=VOICES, value=DEFAULT_VOICE, label=tr(L0, "voice"),
                         visible=not is_clone0,
@@ -260,48 +296,15 @@ def build_tts_tab(lang_component, settings: dict):
                     ref_audio = gr.Audio(
                         label=tr(L0, "ref_audio"), type="filepath",
                         sources=["upload", "microphone"], visible=is_clone0,
-                        elem_id="tts-ref-audio",
+                        elem_id="tts-ref-audio", elem_classes="compact-audio",
                     )
                     ref_text = gr.Textbox(
                         label=tr(L0, "ref_text"), placeholder=tr(L0, "ref_text_ph"),
-                        lines=2, visible=is_clone0,
+                        lines=2, max_lines=4, visible=is_clone0,
                     )
                     clone_note = gr.Markdown(
                         tr(L0, "clone_note"), visible=is_clone0, elem_classes="hint-text"
                     )
-
-                    # Persist a loaded clone so it survives the session: save the
-                    # uploaded clip + transcript under a name, then reload it from
-                    # the dropdown next time instead of re-uploading. The whole
-                    # group toggles with the clone controls above.
-                    with gr.Group(visible=is_clone0) as saved_voice_group:
-                        saved_head = gr.Markdown(
-                            tr(L0, "saved_head"), elem_classes="section-head"
-                        )
-                        with gr.Row():
-                            saved_voice = gr.Dropdown(
-                                choices=vx.voice_names(), value=None,
-                                label=tr(L0, "saved_pick"), scale=4, min_width=140,
-                                filterable=False,
-                            )
-                            load_voice_btn = gr.Button(
-                                tr(L0, "load_voice"), size="sm", scale=0, min_width=90,
-                            )
-                            delete_voice_btn = gr.Button(
-                                "🗑", size="sm", scale=0, min_width=44,
-                                elem_classes="icon-btn",
-                            )
-                        with gr.Row():
-                            voice_name = gr.Textbox(
-                                label=tr(L0, "save_as"), placeholder=tr(L0, "save_as_ph"),
-                                scale=4, min_width=140, max_lines=1,
-                            )
-                            save_voice_btn = gr.Button(
-                                tr(L0, "save_voice"), size="sm", scale=0, min_width=90,
-                            )
-                        saved_status = gr.Markdown(
-                            tr(L0, "saved_hint"), elem_classes="hint-text"
-                        )
 
                     def _persist_model(label: str) -> None:
                         if label in MODELS:
@@ -369,9 +372,9 @@ def build_tts_tab(lang_component, settings: dict):
         with gr.Row(equal_height=True, elem_id="tts-actions"):
             generate_btn = gr.Button(
                 tr(L0, "generate"), variant="primary", scale=0,
-                min_width=200, elem_id="tts-generate",
+                min_width=170, elem_id="tts-generate",
             )
-            with gr.Column(scale=0, min_width=530, elem_id="tts-output-inline"):
+            with gr.Column(scale=0, min_width=545, elem_id="tts-output-inline"):
                 sec_out = gr.Markdown(tr(L0, "sec_out"), elem_classes="section-head")
                 with gr.Row(elem_id="tts-output-row"):
                     # Labels hidden — MP3/WAV and the kbps values are self-evident,
@@ -382,12 +385,12 @@ def build_tts_tab(lang_component, settings: dict):
                     )
                     quality = gr.Radio(
                         choices=QUALITIES, value=DEFAULT_QUALITY, label=tr(L0, "quality"),
-                        show_label=False, scale=3, min_width=230,
+                        show_label=False, scale=3, min_width=300,
                     )
             audio_out = gr.Audio(
-                label=tr(L0, "audio"), type="filepath", elem_id="tts-audio", scale=4
+                label=tr(L0, "audio"), type="filepath", elem_id="tts-audio", scale=3
             )
-            with gr.Column(scale=2, min_width=200, elem_id="tts-result-col"):
+            with gr.Column(scale=2, min_width=190, elem_id="tts-result-col"):
                 file_out = gr.DownloadButton(tr(L0, "download"), size="sm")
                 info_out = gr.Markdown(elem_classes="result-info")
 
@@ -406,7 +409,7 @@ def build_tts_tab(lang_component, settings: dict):
                 )
             files_list = gr.HTML(lib_html())
             file_text = gr.Textbox(
-                label=tr(L0, "file_text"), lines=6, max_lines=12,
+                label=tr(L0, "file_text"), lines=4, max_lines=10,
                 visible=False, show_copy_button=True,
             )
             lib_evt = gr.Textbox(visible=False, elem_id="lib-evt")
@@ -425,73 +428,55 @@ def build_tts_tab(lang_component, settings: dict):
         tab_single.select(ui_files_refresh, outputs=[files_list], show_progress="hidden")
 
     with gr.Tab(tr(L0, "tab_batch")) as tab_batch:
-        batch_desc = gr.Markdown(tr(L0, "batch_desc"))
-        with gr.Row(equal_height=False):
-            with gr.Column(scale=5):
-                batch_text = gr.Textbox(
-                    label=tr(L0, "batch_text"), lines=9, placeholder="你好\n谢谢\n再见"
-                )
-                batch_csv = gr.File(
-                    label=tr(L0, "batch_csv"), file_types=[".csv"], type="filepath", height=120
-                )
-            with gr.Column(scale=6):
-                with gr.Group():
-                    b_defaults = gr.Markdown(tr(L0, "b_defaults"), elem_classes="section-head")
-                    b_model = gr.Radio(choices=model_choices(L0), value=default_model, label=tr(L0, "model"))
-                    with gr.Row():
-                        b_voice = gr.Radio(choices=VOICES, value=DEFAULT_VOICE, label=tr(L0, "voice"))
-                        b_speed = gr.Slider(0.5, 1.5, value=1.0, step=0.05, label=tr(L0, "speed"))
-                    b_mode = gr.Radio(choices=mode_choices(L0), value=DEFAULT_MODE, label=tr(L0, "mode"))
-                    b_style = gr.Textbox(label=tr(L0, "b_style"), lines=2, interactive=SUPPORTS_INSTRUCT)
+        batch_desc = gr.Markdown(tr(L0, "batch_desc"), elem_classes="hint-text")
+        # Same idea as the Single tab: two balanced columns instead of one very
+        # tall one, so the whole batch form is visible without scrolling. The
+        # clone controls live on the left, under the text/CSV inputs.
+        with gr.Row(equal_height=True, elem_id="tts-batch"):
+            with gr.Column(scale=5, min_width=280):
+                with gr.Group(elem_classes="tts-panel"):
+                    batch_text = gr.Textbox(
+                        label=tr(L0, "batch_text"), lines=5, max_lines=10,
+                        placeholder="你好\n谢谢\n再见",
+                    )
+                    batch_csv = gr.File(
+                        label=tr(L0, "batch_csv"), file_types=[".csv"], type="filepath",
+                        height=60, elem_classes="compact-drop",
+                    )
+                with gr.Group(visible=is_clone0, elem_classes="tts-panel") as b_clone_group:
                     b_ref_audio = gr.Audio(
                         label=tr(L0, "ref_audio"), type="filepath",
                         sources=["upload", "microphone"], visible=is_clone0,
+                        elem_classes="compact-audio",
                     )
                     b_ref_text = gr.Textbox(
                         label=tr(L0, "ref_text"), placeholder=tr(L0, "ref_text_ph"),
-                        lines=2, visible=is_clone0,
+                        lines=1, max_lines=3, visible=is_clone0,
                     )
                     # Reuse voices saved in the Single tab as batch defaults.
                     with gr.Group(visible=is_clone0) as b_saved_group:
                         with gr.Row():
                             b_saved_voice = gr.Dropdown(
                                 choices=vx.voice_names(), value=None,
-                                label=tr(L0, "saved_pick"), scale=4, min_width=140,
+                                label=tr(L0, "saved_pick"), scale=4, min_width=120,
                                 filterable=False,
                             )
                             b_load_voice_btn = gr.Button(
-                                tr(L0, "load_voice"), size="sm", scale=0, min_width=90,
+                                tr(L0, "load_voice"), size="sm", scale=0, min_width=84,
                             )
                         b_saved_status = gr.Markdown(elem_classes="hint-text")
 
-                    def _toggle_bclone(label: str):
-                        clone = clone_active(label)
-                        return (
-                            gr.update(visible=not clone),  # b_voice
-                            gr.update(visible=clone),      # b_ref_audio
-                            gr.update(visible=clone),      # b_ref_text
-                            gr.update(visible=clone),      # b_saved_group
-                        )
-
-                    b_model.change(
-                        _toggle_bclone, inputs=[b_model],
-                        outputs=[b_voice, b_ref_audio, b_ref_text, b_saved_group],
-                        show_progress="hidden",
-                    )
-                    ms.add_bridge_reactor(
-                        inputs=[b_model],
-                        outputs=[b_voice, b_ref_audio, b_ref_text, b_saved_group],
-                        fn=lambda data, label: (
-                            _toggle_bclone(label)
-                            if data.get("cat") == "tts_voice_mode"
-                            else (gr.update(), gr.update(), gr.update(), gr.update())
-                        ),
-                    )
-                    b_load_voice_btn.click(
-                        ui_load_voice,
-                        inputs=[b_saved_voice, lang_component],
-                        outputs=[b_ref_audio, b_ref_text, b_saved_status],
-                        show_progress="hidden",
+            with gr.Column(scale=6, min_width=320):
+                with gr.Group(elem_classes="tts-panel"):
+                    b_defaults = gr.Markdown(tr(L0, "b_defaults"), elem_classes="section-head")
+                    b_model = gr.Radio(choices=model_choices(L0), value=default_model, label=tr(L0, "model"))
+                    with gr.Row():
+                        b_voice = gr.Radio(choices=VOICES, value=DEFAULT_VOICE, label=tr(L0, "voice"))
+                        b_speed = gr.Slider(0.5, 1.5, value=1.0, step=0.05, label=tr(L0, "speed"))
+                    b_mode = gr.Radio(choices=mode_choices(L0), value=DEFAULT_MODE, label=tr(L0, "mode"))
+                    b_style = gr.Textbox(
+                        label=tr(L0, "b_style"), lines=1, max_lines=3,
+                        interactive=SUPPORTS_INSTRUCT,
                     )
                     with gr.Accordion(tr(L0, "acc_adv"), open=False) as b_acc_adv:
                         with gr.Row():
@@ -504,15 +489,46 @@ def build_tts_tab(lang_component, settings: dict):
                         b_format = gr.Radio(choices=FORMATS, value=DEFAULT_FORMAT, label=tr(L0, "format"))
                         b_quality = gr.Radio(choices=QUALITIES, value=DEFAULT_QUALITY, label=tr(L0, "quality"))
 
-        batch_btn = gr.Button(tr(L0, "batch_btn"), variant="primary")
-        with gr.Row():
-            with gr.Column(scale=3):
-                batch_summary = gr.Markdown(elem_classes="result-info")
-            with gr.Column(scale=1, min_width=260):
-                batch_zip = gr.DownloadButton(tr(L0, "zip"), size="sm")
+        def _toggle_bclone(label: str):
+            clone = clone_active(label)
+            return (
+                gr.update(visible=not clone),  # b_voice
+                gr.update(visible=clone),      # b_ref_audio
+                gr.update(visible=clone),      # b_ref_text
+                gr.update(visible=clone),      # b_saved_group
+                gr.update(visible=clone),      # b_clone_group
+            )
+
+        b_model.change(
+            _toggle_bclone, inputs=[b_model],
+            outputs=[b_voice, b_ref_audio, b_ref_text, b_saved_group, b_clone_group],
+            show_progress="hidden",
+        )
+        ms.add_bridge_reactor(
+            inputs=[b_model],
+            outputs=[b_voice, b_ref_audio, b_ref_text, b_saved_group, b_clone_group],
+            fn=lambda data, label: (
+                _toggle_bclone(label)
+                if data.get("cat") == "tts_voice_mode"
+                else (gr.update(), gr.update(), gr.update(), gr.update(), gr.update())
+            ),
+        )
+        b_load_voice_btn.click(
+            ui_load_voice,
+            inputs=[b_saved_voice, lang_component],
+            outputs=[b_ref_audio, b_ref_text, b_saved_status],
+            show_progress="hidden",
+        )
+
+        with gr.Row(equal_height=True, elem_id="tts-batch-actions"):
+            batch_btn = gr.Button(
+                tr(L0, "batch_btn"), variant="primary", scale=0, min_width=200,
+            )
+            batch_summary = gr.Markdown(elem_classes="result-info")
+            batch_zip = gr.DownloadButton(tr(L0, "zip"), size="sm", scale=0, min_width=260)
         batch_table = gr.Dataframe(
             headers=["text", "filename", "status", "error"],
-            label=tr(L0, "table"), wrap=True, max_height=240,
+            label=tr(L0, "table"), wrap=True, max_height=150,
         )
 
         batch_btn.click(
@@ -598,7 +614,7 @@ def build_tts_tab(lang_component, settings: dict):
             gr.update(label=tr(lg, "ref_text"), placeholder=tr(lg, "ref_text_ph")),  # b_ref_text
             gr.update(value=tr(lg, "saved_head")),                                   # saved_head
             gr.update(label=tr(lg, "saved_pick")),                                   # saved_voice
-            gr.update(label=tr(lg, "save_as"), placeholder=tr(lg, "save_as_ph")),    # voice_name
+            gr.update(label=tr(lg, "save_as"), placeholder=tr(lg, "save_as")),       # voice_name
             gr.update(value=tr(lg, "save_voice")),                                   # save_voice_btn
             gr.update(value=tr(lg, "load_voice")),                                   # load_voice_btn
             gr.update(label=tr(lg, "saved_pick")),                                   # b_saved_voice

@@ -99,22 +99,31 @@ CHANG_CSS = """
   --chang-gold: #FDB913;
   --chang-line: #F3E0C7;
 }
-.gradio-container { max-width: 1560px !important; padding: 6px 16px 4px !important; }
+.gradio-container {
+  max-width: 1560px !important; padding: 2px 14px 2px !important;
+  --layout-gap: 4px; --form-gap-width: 1px;
+}
+main.app, main.fillable { padding: 2px 0 !important; }
+/* Gradio pads every HTML block by 9px top and bottom — that is three wasted
+   rows between the logo, the status line and the tabs. */
+#chang-topbar .html-container, #status-bar .html-container,
+.tts-panel .html-container { padding: 0 !important; }
+.tab-wrapper { padding-bottom: 2px !important; }
 footer { display: none !important; }
 
 /* ---- header ---- */
-#chang-topbar { align-items: center; margin-bottom: 2px; }
-.chang-header { display: flex; align-items: center; gap: 12px; padding: 2px 0; }
-.chang-logo { height: 44px; width: auto; }
-.chang-row { display: flex; align-items: baseline; gap: 10px; }
+#chang-topbar { align-items: center; margin-bottom: 0; }
+.chang-header { display: flex; align-items: center; gap: 10px; padding: 0; }
+.chang-logo { height: 32px; width: auto; }
+.chang-row { display: flex; align-items: baseline; gap: 8px; }
 .chang-name {
-  font-size: 1.35rem; font-weight: 800; line-height: 1.1;
+  font-size: 1.1rem; font-weight: 800; line-height: 1.1;
   background-image: linear-gradient(90deg, var(--chang-red) 0%, var(--chang-orange) 55%, var(--chang-gold) 100%);
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: var(--chang-orange);
 }
-.chang-cjk { font-size: 0.9rem; font-weight: 700; letter-spacing: 0.3em; color: var(--chang-gold); }
-.chang-tagline { font-size: 0.75rem; color: #977a5c; margin-top: 1px; }
+.chang-cjk { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.24em; color: var(--chang-gold); }
+.chang-tagline { font-size: 0.68rem; color: #977a5c; margin-top: 0; }
 #lang-col { justify-content: center; }
 
 /* ---- language pill ---- */
@@ -125,7 +134,7 @@ footer { display: none !important; }
 }
 #lang-pick label {
   border: none !important; background: transparent !important; box-shadow: none !important;
-  border-radius: 999px !important; padding: 3px 12px !important; font-size: 0.8rem !important;
+  border-radius: 999px !important; padding: 2px 11px !important; font-size: 0.76rem !important;
 }
 #lang-pick label.selected, #lang-pick label:has(input:checked) {
   background: linear-gradient(90deg, var(--chang-red), var(--chang-orange) 60%, var(--chang-gold)) !important;
@@ -133,22 +142,22 @@ footer { display: none !important; }
 #lang-pick label.selected span, #lang-pick label:has(input:checked) span { color: #fff !important; }
 
 /* ---- status bar ---- */
-#status-bar { margin: 0 0 4px; }
+#status-bar { margin: 0 0 2px; }
 .status-line {
-  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-  font-size: 0.76rem; color: #7A5C3E; padding: 4px 10px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  font-size: 0.72rem; color: #7A5C3E; padding: 2px 9px;
   border: 1px solid var(--chang-line); border-radius: 8px; background: #FFFDF8;
 }
 .status-line b { color: var(--chang-red); font-weight: 700; }
 .status-warn { color: #B3261E; font-weight: 700; }
 
 /* ---- compact blocks ---- */
-.block, .form { padding-top: 1px !important; padding-bottom: 1px !important; }
-.gap { gap: 3px !important; }
-.gr-group, .styler { padding: 3px 8px !important; }
-.gr-group { margin-bottom: 4px !important; }
+.block, .form { padding-top: 0 !important; padding-bottom: 0 !important; }
+.gap { gap: 2px !important; }
+.gr-group, .styler { padding: 2px 7px !important; }
+.gr-group { margin-bottom: 3px !important; }
 .section-head p {
-  font-size: 0.78rem !important; margin: 0 !important; letter-spacing: 0.04em;
+  font-size: 0.74rem !important; margin: 0 !important; letter-spacing: 0.04em;
   text-transform: uppercase; color: var(--chang-orange) !important;
 }
 .section-head strong { color: var(--chang-red); }
@@ -162,15 +171,56 @@ label[data-testid$="-radio-label"] {
 }
 fieldset.block { gap: 2px !important; }
 
-/* ---- audio players: shrink the empty placeholder ---- */
-#tts-audio .empty { min-height: 56px !important; }
-#tts-audio { min-height: 0 !important; }
+/* Sliders are the densest thing on the page — squeeze the label row, the
+   number box and the track so three rows of them cost one row of height. */
+.block .head { margin-bottom: 0 !important; align-items: center; gap: 2px !important; }
+.block .head label { min-width: 0; }
+.block .head span[data-testid="block-info"] {
+  font-size: 0.7rem !important; line-height: 1.15 !important;
+}
+.block .head input[type="number"] {
+  height: 19px !important; width: 40px !important; padding: 0 3px !important;
+  font-size: 0.7rem !important;
+}
+.block .head .tab-like-container { gap: 1px !important; }
+.reset-button { padding: 0 2px !important; font-size: 0.7rem !important; }
+.slider_input_container { margin: 0 !important; }
+.min_value, .max_value { font-size: 0.62rem !important; }
+input[type="range"] { margin: 0 !important; }
+.block > label > span, label > span[data-testid="block-info"] {
+  margin-bottom: 1px !important; display: inline-block;
+}
+input[type="text"], input[type="number"], textarea, .gr-box {
+  font-size: 0.84rem !important;
+}
+
+/* ---- audio players: keep every player to a couple of rows ---- */
+#tts-audio .empty, .compact-audio .empty { min-height: 40px !important; }
+#tts-audio, .compact-audio { min-height: 0 !important; }
+#tts-audio .waveform-container, .compact-audio .waveform-container,
+#tts-audio #waveform, .compact-audio #waveform {
+  max-height: 46px !important; min-height: 0 !important; overflow: hidden;
+}
+#tts-audio .timestamps, .compact-audio .timestamps {
+  font-size: 0.66rem !important; padding: 0 4px !important; margin: 0 !important;
+}
+#tts-audio .controls, .compact-audio .controls {
+  padding: 1px 4px !important; margin: 0 !important; gap: 4px !important;
+}
+#tts-audio .component-wrapper, .compact-audio .component-wrapper { padding: 0 !important; }
+#tts-audio .controls .icon, .compact-audio .controls .icon {
+  height: 16px !important; width: 16px !important;
+}
+#tts-audio .source-selection button, .compact-audio .source-selection button {
+  width: 22px !important; height: 22px !important;
+}
 
 /* ---- TTS single tab: three-column workspace that fits one window ---- */
-#tts-main { align-items: stretch; gap: 10px !important; }
-#tts-main > .column { gap: 6px !important; }
-.tts-panel { height: 100%; }
-#tts-main .tts-panel { padding: 4px 8px !important; }
+#tts-main { align-items: stretch; gap: 8px !important; }
+#tts-main > .column { gap: 5px !important; }
+#tts-main .tts-panel { padding: 3px 8px 4px !important; flex: 1 1 auto; min-height: 0; }
+#tts-main #tts-saved { flex: 0 0 auto; }
+#tts-main .block { padding-top: 0 !important; padding-bottom: 0 !important; }
 /* Text column: the textarea grows to fill the tallest sibling column. Don't set
    an explicit height on the column itself — that would cancel the row's
    align-items:stretch. Let it stretch, then fill down through the wrappers. */
@@ -179,49 +229,85 @@ fieldset.block { gap: 2px !important; }
 #tts-col-text .tts-panel > .styler {
   display: flex; flex-direction: column; min-height: 0;
 }
-#tts-col-text .tts-panel > .styler { flex: 1 1 auto; }
+#tts-col-text .tts-panel > .styler { flex: 1 1 auto !important; }
+/* Gradio puts an inline flex-grow:0 on the .form wrapper — override it, or the
+   textarea stops at its line count and leaves the panel half empty. */
+#tts-col-text .tts-panel > .styler > .form {
+  flex: 1 1 auto !important; display: flex; flex-direction: column; min-height: 0;
+}
 #tts-text {
   flex: 1 1 auto !important; min-height: 0 !important;
   display: flex; flex-direction: column;
 }
 #tts-text > label { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+#tts-text .input-container { flex: 1 1 auto; display: flex; min-height: 0; }
 #tts-text textarea {
   flex: 1 1 auto !important; height: 100% !important;
-  min-height: 240px !important; resize: none; box-sizing: border-box;
+  min-height: 110px !important; resize: none; box-sizing: border-box;
 }
 /* Keep the reference-clip uploader/player from towering in clone mode: the
    upload drop zone is a .boundedheight button that defaults to ~240px. */
-#tts-ref-audio, #tts-ref-audio .component-wrap { min-height: 0 !important; }
-#tts-ref-audio .empty { min-height: 44px !important; }
-#tts-ref-audio .waveform-container { min-height: 0 !important; }
-#tts-ref-audio .audio-container button.boundedheight { min-height: 76px !important; }
-#tts-ref-audio .audio-container .wrap { min-height: 0 !important; }
-#tts-ref-audio .audio-container button.boundedheight .icon-wrap { margin-bottom: 0 !important; }
+.compact-audio, .compact-audio .component-wrap { min-height: 0 !important; }
+.compact-audio .audio-container button.boundedheight {
+  min-height: 56px !important; font-size: 0.8rem !important;
+}
+.compact-audio .audio-container button.boundedheight > .wrap {
+  flex-direction: row !important; flex-wrap: wrap; gap: 5px;
+  align-items: center; justify-content: center;
+}
+.compact-audio .or { font-size: 0.72rem !important; }
+.compact-audio .icon-wrap { width: 18px !important; margin: 0 !important; }
+.compact-audio .audio-container .wrap { min-height: 0 !important; }
+.compact-audio .audio-container button.boundedheight .icon-wrap { margin-bottom: 0 !important; }
+.compact-audio .source-selection {
+  padding: 0 !important; margin: 0 !important; min-height: 0 !important;
+}
+.compact-audio .source-selection button { padding: 1px 6px !important; }
 
 /* Trim vertical bulk in the Voice & Model column so the whole tab clears a
-   laptop viewport. */
-#tts-main .ms-section { margin: 1px 0 3px !important; }
-#tts-main .ms-card { padding: 4px 10px !important; }
-#tts-main .ms-chip { margin-bottom: 3px !important; }
-#tts-main .ms-hint { margin-top: 2px !important; }
-#tts-main .hint-text p { font-size: 0.72rem !important; line-height: 1.34 !important; margin: 2px 0 0 !important; }
+   laptop viewport: one-line selector cards, no RAM subline, no chip. */
+#tts-main .ms-section { margin: 0 0 2px !important; }
+#tts-main .ms-title { font-size: 0.74rem; margin-bottom: 2px; }
+#tts-main .ms-chip { display: none !important; }
+#tts-main .ms-row { gap: 4px !important; }
+#tts-main .ms-card { padding: 3px 9px !important; font-size: 0.76rem; }
+#tts-main .ms-ram { display: none !important; }
+#tts-main .ms-hint { margin-top: 1px !important; font-size: 0.66rem; line-height: 1.3; }
+#tts-main .hint-text p { font-size: 0.68rem !important; line-height: 1.3 !important; margin: 1px 0 0 !important; }
+#tts-main .section-head p { line-height: 1.5; }
+/* Saved voices: label-less rows (the panel head names them) on two tight lines */
+#tts-saved .row { gap: 4px !important; }
+#tts-saved input[type="text"] { padding: 3px 7px !important; }
+#tts-saved .wrap-inner, #tts-saved .secondary-wrap { padding: 1px 4px !important; }
+
+/* ---- batch tab: two balanced columns + a one-row action bar ---- */
+#tts-batch { align-items: stretch; gap: 8px !important; }
+#tts-batch > .column { gap: 5px !important; }
+#tts-batch .tts-panel { padding: 3px 8px 4px !important; }
+#tts-batch-actions { align-items: center; gap: 10px !important; margin: 5px 0 4px; }
+.compact-drop .center.boundedheight { min-height: 52px !important; }
+.compact-drop .center.boundedheight > .wrap {
+  flex-direction: row !important; flex-wrap: wrap; gap: 5px;
+  align-items: center; justify-content: center; font-size: 0.8rem !important;
+}
+.compact-drop .icon-wrap { width: 18px !important; margin: 0 !important; }
 
 /* ---- action bar: generate · output · preview · download ---- */
-#tts-actions { align-items: center; gap: 10px !important; margin: 6px 0 4px; }
-#tts-generate { height: 60px; min-height: 60px; font-size: 0.95rem !important; }
-#tts-result-col { justify-content: center; gap: 4px !important; }
-#tts-actions #tts-audio .empty { min-height: 44px !important; }
+#tts-actions { align-items: center; gap: 8px !important; margin: 4px 0 3px; }
+#tts-generate { height: 46px; min-height: 46px; font-size: 0.9rem !important; }
+#tts-result-col { justify-content: center; gap: 2px !important; }
+#tts-actions #tts-audio .empty { min-height: 38px !important; }
 #tts-actions #tts-audio { min-height: 0 !important; }
 /* inline Output (format + quality) — compact card so it rides the action bar */
 #tts-output-inline {
   border: 1px solid var(--chang-line); border-radius: 10px;
-  background: #FFFDF8; padding: 3px 10px 4px !important; gap: 0 !important;
+  background: #FFFDF8; padding: 2px 9px 3px !important; gap: 0 !important;
   align-self: center;
 }
-#tts-output-inline .section-head p { margin-bottom: 2px !important; }
+#tts-output-inline .section-head p { margin-bottom: 1px !important; font-size: 0.68rem !important; }
 #tts-output-inline .form, #tts-output-inline fieldset.block { gap: 1px !important; }
 #tts-output-inline label[data-testid$="-radio-label"] {
-  padding: 2px 7px !important; white-space: nowrap !important;
+  padding: 1px 7px !important; white-space: nowrap !important; font-size: 0.75rem !important;
 }
 /* keep Format | Quality side-by-side, pills on one line each */
 #tts-output-row { flex-wrap: nowrap !important; gap: 8px !important; }
@@ -236,11 +322,11 @@ fieldset.block { gap: 2px !important; }
 }
 .lib-list {
   border: 1px solid var(--chang-line); border-radius: 8px; background: #fff;
-  max-height: 220px; overflow-y: auto; font-size: 0.8rem;
+  max-height: min(122px, 16vh); overflow-y: auto; font-size: 0.76rem;
 }
 .lib-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) 64px 120px 100px;
-  gap: 8px; align-items: center; padding: 3px 10px;
+  display: grid; grid-template-columns: minmax(0, 1fr) 60px 112px 96px;
+  gap: 8px; align-items: center; padding: 1px 10px;
   border-bottom: 1px solid var(--chang-line);
 }
 .lib-row:last-child { border-bottom: none; }
@@ -251,14 +337,14 @@ fieldset.block { gap: 2px !important; }
    2-line clamp stops long Chinese filenames from stacking one glyph per line. */
 .lib-name {
   min-width: 0; overflow-wrap: anywhere; word-break: break-word;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-  overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+  overflow: hidden; line-height: 1.7;
 }
 .lib-size, .lib-date { color: #7A5C3E; font-size: 0.72rem; white-space: nowrap; }
 .lib-actions { display: flex; gap: 4px; justify-content: flex-end; }
 .lib-btn {
   border: 1px solid var(--chang-line); background: #FFFDF8; border-radius: 6px;
-  padding: 1px 7px; cursor: pointer; font-size: 0.85rem; line-height: 1.4;
+  padding: 0 6px; cursor: pointer; font-size: 0.8rem; line-height: 1.5;
 }
 .lib-btn:hover { background: #FFF3E0; border-color: var(--chang-orange); }
 .lib-row.playing { background: #FFF7E8; }
@@ -322,21 +408,37 @@ fieldset.block { gap: 2px !important; }
 #model-evt { display: none !important; }
 
 /* ---- tabs ---- */
-.tab-nav button, button.tab-item { font-weight: 600 !important; }
+.tab-nav { margin-bottom: 3px !important; }
+.tab-nav button, button.tab-item {
+  font-weight: 600 !important; font-size: 0.85rem !important; padding: 5px 10px !important;
+}
+.tabitem { padding: 3px 0 0 !important; border: none !important; }
 .tab-nav button.selected, button.selected.tab-item {
   color: var(--chang-red) !important;
   border-color: var(--chang-orange) !important;
 }
 
 /* ---- results footer ---- */
-.result-info p { font-size: 0.8rem !important; margin: 2px 0 !important; }
-.app-footer p { font-size: 0.72rem !important; color: #a58969 !important; margin: 2px 0 0 !important; }
+.result-info p { font-size: 0.74rem !important; margin: 1px 0 !important; line-height: 1.35; }
+.result-info code { font-size: 0.7rem !important; overflow-wrap: anywhere; }
+.app-footer p { font-size: 0.68rem !important; color: #a58969 !important; margin: 1px 0 0 !important; }
 """
 
 # One shared Audio element for the library: clicking ▶ on a row stops whatever
 # was playing and plays that row's file. Reveal/preview clicks are forwarded to
 # Python by writing JSON into the hidden #lib-evt textbox.
 LIBRARY_HEAD = """
+<style>
+/* ---- fit-to-window safety net ----
+   The layout is sized so the TTS tab clears a ~860px-tall viewport with no page
+   scroll. On shorter windows scale the page down a notch rather than hand the
+   user a scrollbar — same layout, just smaller. This lives here rather than in
+   CHANG_CSS because Gradio rewrites custom-CSS selectors and drops the queries. */
+@media (max-height: 855px) { .gradio-container { zoom: 0.94; } }
+@media (max-height: 800px) { .gradio-container { zoom: 0.88; } }
+@media (max-height: 730px) { .gradio-container { zoom: 0.82; } }
+@media (max-height: 660px) { .gradio-container { zoom: 0.75; } }
+</style>
 <script>
 window.changLibStop = () => {
   const a = window._changLibAudio;

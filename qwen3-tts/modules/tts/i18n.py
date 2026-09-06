@@ -23,10 +23,8 @@ T = {
         "ref_text": "Reference transcript (optional)",
         "ref_text_ph": "Type what is said in the reference clip — improves cloning",
         "clone_note": (
-            "🎭 **Voice cloning** speaks your text in the uploaded voice. A short "
-            "transcript above improves the match (leave it blank and Whisper fills "
-            "it in). Emotion tags like `[happy]`, `[whisper]` work with **Fish S2 "
-            "Pro** only; the voice/style presets don't apply while cloning."
+            "🎭 Speaks your text in the uploaded voice. Leave the transcript blank "
+            "and Whisper fills it in. `[happy]` / `[whisper]` tags: **Fish S2 Pro** only."
         ),
         "saved_head": "💼 **Saved voices**",
         "saved_pick": "Saved voices",
@@ -103,10 +101,8 @@ T = {
         "ref_text": "Lời thoại của mẫu (tuỳ chọn)",
         "ref_text_ph": "Nhập nội dung nói trong mẫu — giúp nhân bản chính xác hơn",
         "clone_note": (
-            "🎭 **Nhân bản giọng** đọc văn bản bằng giọng đã tải lên. Thêm lời thoại ở "
-            "trên để khớp tốt hơn (bỏ trống thì Whisper sẽ tự điền). Thẻ cảm xúc như "
-            "`[happy]`, `[whisper]` chỉ dùng cho **Fish S2 Pro**; các thiết lập giọng/"
-            "phong cách không áp dụng khi nhân bản."
+            "🎭 Đọc văn bản bằng giọng đã tải lên. Bỏ trống lời thoại thì Whisper tự "
+            "điền. Thẻ `[happy]` / `[whisper]`: chỉ **Fish S2 Pro**."
         ),
         "saved_head": "💼 **Giọng đã lưu**",
         "saved_pick": "Giọng đã lưu",
@@ -183,9 +179,8 @@ T = {
         "ref_text": "参考文本（可选）",
         "ref_text_ph": "输入参考片段中所说的内容 — 可提升克隆效果",
         "clone_note": (
-            "🎭 **声音克隆**会用上传的声音朗读你的文本。填写上方的参考文本可提升克隆效果"
-            "（留空则由 Whisper 自动转写）。`[happy]`、`[whisper]` 等情感标签仅适用于 "
-            "**Fish S2 Pro**；克隆时上方的声音/风格设置无效。"
+            "🎭 用上传的声音朗读文本。参考文本留空则由 Whisper 自动转写。"
+            "`[happy]`、`[whisper]` 标签仅适用于 **Fish S2 Pro**。"
         ),
         "saved_head": "💼 **已保存的声音**",
         "saved_pick": "已保存的声音",
