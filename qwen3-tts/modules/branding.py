@@ -418,6 +418,61 @@ input[type="text"], input[type="number"], textarea, .gr-box {
   border-color: var(--chang-orange) !important;
 }
 
+/* ---- in-place progress overlay ----
+   Gradio's own tracker is a hairline bar in grey; make it a chunky sunrise bar
+   so "something is happening" reads from across the room. The window-top bar in
+   LIBRARY_HEAD carries the same state for whichever tab you are looking at. */
+.wrap.full .progress-bar-wrap, .wrap.minimal .progress-bar-wrap {
+  width: 86% !important; height: 12px !important;
+  border: 1px solid var(--chang-line) !important; border-radius: 999px !important;
+  background: #FFF3E0 !important; overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(122, 92, 62, 0.12);
+}
+.wrap.full .progress-bar, .wrap.minimal .progress-bar {
+  background: linear-gradient(90deg, var(--chang-red), var(--chang-orange) 55%, var(--chang-gold)) !important;
+  border-radius: 999px !important;
+  transition: width 0.2s ease;
+}
+.wrap.full .progress-level-inner, .wrap.minimal .progress-level-inner {
+  font-size: 0.78rem !important; font-weight: 600 !important;
+  color: var(--chang-red) !important; margin: 0 auto var(--size-1) !important;
+}
+.wrap.generating { border-color: var(--chang-orange) !important; }
+
+/* ---- finish-sound toggle (status bar) ---- */
+.chime-toggle {
+  margin-left: auto; border: 1px solid var(--chang-line); background: #fff;
+  border-radius: 999px; padding: 0 8px; cursor: pointer;
+  font-size: 0.86rem; line-height: 1.7;
+}
+.chime-toggle:hover { background: #FFF3E0; border-color: var(--chang-orange); }
+.chime-toggle.muted { opacity: 0.45; }
+
+/* ---- Generator run bar ----
+   The Generator runs in a background thread, so it has no Gradio progress of
+   its own — the 2.5s tick redraws this bar, and the window-top bar mirrors it
+   from the data-* attributes. */
+.gen-prog { width: 100%; }
+.gen-prog-track {
+  height: 12px; border: 1px solid var(--chang-line); border-radius: 999px;
+  background: #FFF3E0; overflow: hidden; margin-bottom: 3px;
+  box-shadow: inset 0 1px 2px rgba(122, 92, 62, 0.12);
+}
+.gen-prog-fill {
+  height: 100%; border-radius: 999px; transition: width 0.35s ease;
+  background: linear-gradient(90deg, var(--chang-red), var(--chang-orange) 55%, var(--chang-gold));
+}
+.gen-prog[data-run="running"] .gen-prog-fill {
+  background-image: linear-gradient(90deg, var(--chang-red), var(--chang-orange) 55%, var(--chang-gold)),
+                    repeating-linear-gradient(115deg, rgba(255,255,255,.35) 0 10px, rgba(255,255,255,0) 10px 24px);
+  background-blend-mode: overlay;
+  animation: gen-prog-shimmer 1.1s linear infinite;
+}
+.gen-prog[data-run="idle"] .gen-prog-fill { opacity: 0.55; }
+@keyframes gen-prog-shimmer { to { background-position: 0 0, 48px 0; } }
+.gen-prog-text { font-size: 0.74rem; color: #7A5C3E; line-height: 1.35; }
+.gen-prog-text b { color: var(--chang-red); font-weight: 700; }
+
 /* ---- results footer ---- */
 .result-info p { font-size: 0.74rem !important; margin: 1px 0 !important; line-height: 1.35; }
 .result-info code { font-size: 0.7rem !important; overflow-wrap: anywhere; }
@@ -438,6 +493,65 @@ LIBRARY_HEAD = """
 @media (max-height: 800px) { .gradio-container { zoom: 0.88; } }
 @media (max-height: 730px) { .gradio-container { zoom: 0.82; } }
 @media (max-height: 660px) { .gradio-container { zoom: 0.75; } }
+
+/* ---- window-top load bar ----
+   Lives on <body>, outside .gradio-container, so the container's fit-to-window
+   zoom never shrinks it: whatever tab you are on, a running job paints a full
+   width sunrise bar across the top of the window plus a status pill. Driven by
+   the poll loop below, which reads Gradio's own status tracker. */
+#chang-loadbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 9998;
+  pointer-events: none; opacity: 0; transition: opacity 0.25s ease;
+}
+#chang-loadbar.on { opacity: 1; }
+#chang-loadbar .clb-track {
+  position: relative; height: 7px; width: 100%; overflow: hidden;
+  background: rgba(232, 56, 13, 0.10);
+  box-shadow: 0 1px 7px rgba(232, 120, 30, 0.38);
+}
+#chang-loadbar .clb-fill {
+  position: relative; height: 100%; width: 0%; border-radius: 0 3px 3px 0;
+  background: linear-gradient(90deg, #E8380D 0%, #F58220 55%, #FDB913 100%);
+  box-shadow: 0 0 14px rgba(245, 130, 32, 0.95);
+  transition: width 0.25s ease;
+}
+/* Shimmer over the filled part, so a long single-chunk stage still looks alive
+   while its fraction sits still. */
+#chang-loadbar .clb-fill::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(100deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.75) 50%, rgba(255,255,255,0) 100%);
+  animation: clb-shimmer 1.25s linear infinite;
+}
+#chang-loadbar.indeterminate .clb-fill {
+  width: 32% !important; transition: none;
+  animation: clb-sweep 1.25s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+#chang-loadbar.done .clb-fill { width: 100% !important; animation: none; transform: none; }
+#chang-loadbar.done .clb-fill::after { animation: none; opacity: 0; }
+@keyframes clb-shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+@keyframes clb-sweep { 0% { transform: translateX(-110%); } 100% { transform: translateX(420%); } }
+#chang-loadbar .clb-pill {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 7px; max-width: 74vw;
+  background: #fff; border: 1px solid #F3E0C7; border-radius: 999px;
+  padding: 3px 14px; box-shadow: 0 3px 11px rgba(232, 120, 30, 0.24);
+  font: 600 0.78rem/1.35 system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  color: #7A5C3E; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#chang-loadbar .clb-dot {
+  flex: none; width: 8px; height: 8px; border-radius: 50%; background: #E8380D;
+  animation: clb-pulse 1s ease-in-out infinite;
+}
+#chang-loadbar.done .clb-dot { animation: none; background: #2E7D32; }
+#chang-loadbar .clb-time { color: #a58969; font-weight: 500; }
+@keyframes clb-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.7); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #chang-loadbar .clb-fill::after, #chang-loadbar .clb-dot,
+  #chang-loadbar.indeterminate .clb-fill { animation: none; }
+}
 </style>
 <script>
 window.changLibStop = () => {
@@ -496,6 +610,190 @@ document.addEventListener('keydown', (ev) => {
     document.querySelector('#chat-send')?.click();
   }
 }, true);
+
+/* ---- window-top load bar + "generation finished" chime -------------------
+   Gradio's own status tracker is a small overlay inside whichever component is
+   an output of the running event — easy to miss on a dense page. These two
+   pieces read that tracker (plus the Generator tab's own bar, which runs in a
+   background thread and has no Gradio progress) and mirror it as a full-width
+   bar across the top of the window, then play a short chime on the way back to
+   idle. Mute with the 🔔 button in the status bar; the choice is remembered. */
+(() => {
+  const CHIME_KEY = 'chang_chime';
+  const MIN_CHIME_MS = 1200;   // stay quiet for quick refreshes
+  const IDLE_TICKS = 3;        // ~360ms of quiet before a run counts as done
+  const WORDS = {
+    en: {work: 'Generating…', done: 'Done', on: 'Sound when a generation finishes — click to mute',
+         off: 'Finish sound is muted — click to turn it back on'},
+    vi: {work: 'Đang tạo…', done: 'Xong', on: 'Phát âm báo khi tạo xong — bấm để tắt',
+         off: 'Đã tắt âm báo — bấm để bật lại'},
+    zh: {work: '正在生成…', done: '完成', on: '生成完成时提示音 — 点击静音',
+         off: '提示音已关闭 — 点击开启'},
+  };
+  const LANG_ALIAS = {vi: 'vi', en: 'en', zh: 'zh', 'Tiếng Việt': 'vi', 'English': 'en', '中文': 'zh'};
+
+  let bar = null, fill = null, label = null, clock = null;
+  let actx = null, busySince = 0, idleTicks = 0, hideTimer = 0;
+
+  const words = () => {
+    const el = document.querySelector('#lang-pick input:checked');
+    return WORDS[LANG_ALIAS[el && el.value]] || WORDS.en;
+  };
+
+  // ---- chime ----
+  const chimeOn = () => {
+    try { return localStorage.getItem(CHIME_KEY) !== 'off'; } catch (e) { return true; }
+  };
+  const audioCtx = () => {
+    const C = window.AudioContext || window.webkitAudioContext;
+    if (!C) return null;
+    if (!actx) actx = new C();
+    if (actx.state === 'suspended') actx.resume();
+    return actx;
+  };
+  // Browsers only allow audio after a gesture — the click that starts a
+  // generation is that gesture, so unlock on any pointer press.
+  document.addEventListener('pointerdown', () => { try { audioCtx(); } catch (e) {} }, true);
+
+  const playChime = (kind) => {
+    let c;
+    try { c = audioCtx(); } catch (e) { return; }
+    if (!c) return;
+    // done: a warm E-B-E arpeggio. error: two falling notes.
+    const notes = kind === 'error'
+      ? [[392.0, 0.00, 0.20, 0.16], [261.6, 0.17, 0.36, 0.16]]
+      : [[659.3, 0.00, 0.30, 0.10], [987.8, 0.09, 0.32, 0.09], [1318.5, 0.18, 0.55, 0.08]];
+    const t0 = c.currentTime + 0.02;
+    for (const [freq, off, dur, peak] of notes) {
+      const osc = c.createOscillator(), gain = c.createGain();
+      osc.type = kind === 'error' ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(freq, t0 + off);
+      gain.gain.setValueAtTime(0.0001, t0 + off);
+      gain.gain.exponentialRampToValueAtTime(peak, t0 + off + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + off + dur);
+      osc.connect(gain); gain.connect(c.destination);
+      osc.start(t0 + off); osc.stop(t0 + off + dur + 0.05);
+    }
+  };
+  window.changPlayChime = playChime;
+
+  window.changToggleChime = () => {
+    const turningOff = chimeOn();
+    try { localStorage.setItem(CHIME_KEY, turningOff ? 'off' : 'on'); } catch (e) {}
+    syncChimeBtn();
+    if (!turningOff) playChime('done');   // preview when switching it back on
+  };
+
+  // The status bar HTML is re-rendered every few seconds, so re-apply the
+  // remembered state instead of tracking it in the DOM.
+  const syncChimeBtn = () => {
+    const on = chimeOn(), w = words();
+    const face = on ? '🔔' : '🔕';
+    const tip = on ? w.on : w.off;
+    document.querySelectorAll('#chang-chime').forEach((b) => {
+      if (b.title === tip && b.textContent === face) return;  // poll runs 8x/s
+      b.textContent = face;
+      b.title = tip;
+      b.classList.toggle('muted', !on);
+    });
+  };
+
+  // ---- top bar ----
+  const ensureBar = () => {
+    if (bar && document.body.contains(bar)) return true;
+    if (!document.body) return false;
+    bar = document.createElement('div');
+    bar.id = 'chang-loadbar';
+    bar.innerHTML =
+      '<div class="clb-track"><div class="clb-fill"></div></div>' +
+      '<div class="clb-pill"><span class="clb-dot"></span>' +
+      '<span class="clb-txt"></span><span class="clb-time"></span></div>';
+    document.body.appendChild(bar);
+    fill = bar.querySelector('.clb-fill');
+    label = bar.querySelector('.clb-txt');
+    clock = bar.querySelector('.clb-time');
+    return true;
+  };
+
+  // Gradio marks a live status tracker "wrap <variant> <show_progress>" and
+  // adds .hide once the event completes, so anything wired with
+  // show_progress="hidden" never shows up here.
+  const tracker = () => {
+    const els = document.querySelectorAll('.wrap.full:not(.hide), .wrap.minimal:not(.hide)');
+    for (const el of els) if (el.getClientRects().length) return el;
+    return null;
+  };
+  const generatorRun = () => {
+    const g = document.querySelector('#gen-progress');
+    return g && g.dataset.run === 'running' ? g : null;
+  };
+
+  const finish = () => {
+    const ran = Date.now() - busySince;
+    busySince = 0;
+    bar.classList.add('done');
+    bar.classList.remove('indeterminate');
+    label.textContent = words().done;
+    clock.textContent = ran >= 1000 ? ' · ' + (ran / 1000).toFixed(1) + 's' : '';
+    // A failed run raises a Gradio error toast a beat later — chime differently
+    // for that rather than sounding a cheerful "all done".
+    setTimeout(() => {
+      if (ran >= MIN_CHIME_MS && chimeOn()) {
+        playChime(document.querySelector('.toast-body.error') ? 'error' : 'done');
+      }
+    }, 240);
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      bar.classList.remove('on', 'done');
+      fill.style.width = '0%';
+    }, 1100);
+  };
+
+  const poll = () => {
+    if (!ensureBar()) return;
+    syncChimeBtn();
+
+    const gen = generatorRun();
+    const el = gen || tracker();
+    if (el) {
+      idleTicks = 0;
+      if (!busySince) {
+        busySince = Date.now();
+        clearTimeout(hideTimer);
+        bar.classList.remove('done');
+        bar.classList.add('on');
+      }
+      let pct = NaN, text = '';
+      if (gen) {
+        pct = parseFloat(gen.dataset.pct);
+        text = gen.dataset.label || '';
+      } else {
+        const pb = el.querySelector('.progress-bar');
+        if (pb && pb.style.width) pct = parseFloat(pb.style.width);
+        const lv = el.querySelector('.progress-level-inner');
+        if (lv) text = lv.textContent.trim();
+      }
+      if (isFinite(pct)) {
+        bar.classList.remove('indeterminate');
+        fill.style.width = Math.max(3, Math.min(100, pct)) + '%';
+      } else {
+        bar.classList.add('indeterminate');   // queued, or a stage with no fraction
+      }
+      label.textContent = text || words().work;
+      const secs = (Date.now() - busySince) / 1000;
+      clock.textContent = secs >= 1 ? ' · ' + secs.toFixed(1) + 's' : '';
+    } else if (busySince && ++idleTicks >= IDLE_TICKS) {
+      finish();   // several quiet ticks, not the gap between two chained events
+    }
+  };
+
+  const start = () => { ensureBar(); setInterval(poll, 120); };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start);
+  } else {
+    start();
+  }
+})();
 </script>
 """
 

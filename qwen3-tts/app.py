@@ -71,6 +71,11 @@ def status_html() -> str:
         f"<span>📊 RAM: <b>{used:.1f} / {total:.0f} GB</b></span>"
         f"<span>⚙️ Task: <b>{mm.get_task()}</b></span>"
         f"{warn_html}"
+        # Mutes the chime that plays when a generation finishes. The button is
+        # stateless here: branding's poll loop paints 🔔 / 🔕 from localStorage
+        # every tick, so it survives this bar being re-rendered.
+        '<button id="chang-chime" class="chime-toggle" '
+        'onclick="changToggleChime()">🔔</button>'
         "</div>"
     )
 

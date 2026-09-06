@@ -54,16 +54,24 @@ def ui_generate(
     p_sentence=DEFAULT_PAUSE_SENTENCE,
     p_comma=DEFAULT_PAUSE_COMMA,
     p_paragraph=DEFAULT_PAUSE_PARAGRAPH,
+    progress=gr.Progress(),
 ):
+    # generate_one reports stage keys; translate them here so the progress bar
+    # speaks the interface language.
+    def on_stage(frac: float, stage: str, fmt: dict) -> None:
+        progress(frac, desc=tr(lang, stage).format(**fmt))
+
     try:
         repo = active_repo(model_label) if (model_label in MODELS or is_fish(model_label)) else None
         if repo and needs_load(repo):
             gr.Info(tr(lang, "loading").format(model=model_label))
+        progress(0.0, desc=tr(lang, "prog_start"))
         res = generate_one(
             text, model_label, voice, mode, speed, style,
             p_before, p_after, p_between, repeat, out_format, quality,
             ref_audio=ref_audio, ref_text=ref_text,
             p_sentence=p_sentence, p_comma=p_comma, p_paragraph=p_paragraph,
+            progress_cb=on_stage,
         )
     except Exception as exc:  # noqa: BLE001 - surfaced to the user
         raise gr.Error(to_friendly_error(exc))
@@ -451,6 +459,9 @@ def build_tts_tab(lang_component, settings: dict):
                     ref_audio, ref_text, lang_component,
                     p_sentence, p_comma, p_paragraph],
             outputs=[audio_out, file_out, info_out],
+            # Keep the in-place progress overlay on the player instead of
+            # smearing it across the download button and the result text.
+            show_progress_on=[audio_out],
         ).then(ui_files_refresh, outputs=[files_list], show_progress="hidden")
 
         files_refresh_btn.click(ui_files_refresh, outputs=[files_list], show_progress="hidden")

@@ -12,6 +12,7 @@ it, refreshed by a timer while a queue is running.
 
 from __future__ import annotations
 
+import html
 import json
 import re
 
@@ -185,32 +186,65 @@ def _results_summary(pid: str) -> str:
             f"Latest: {tail or '—'}")
 
 
-def _status_md(pid: str) -> str:
+def _status_html(pid: str) -> str:
+    """Run status as a filled progress bar plus a one-line summary.
+
+    The runner works through the queue on its own thread, so there is no Gradio
+    progress event to hang a bar on — the 2.5s tick redraws this instead. The
+    data-* attributes are what branding's window-top bar mirrors, and its
+    data-run flip back to "idle" is what triggers the finish chime.
+    """
     snap = ge.RUNNER.snapshot()
+    running = snap["status"] != "idle" and snap.get("pid") == pid
     parts = []
+    pct = 0.0
+    label = ""
+
     if pid:
         counts = gp.queue_counts(pid)
-        parts.append(f"queued **{counts['queued']}** · completed **{counts['completed']}** "
-                     f"· failed **{counts['failed']}** · skipped **{counts['skipped']}**")
-    if snap["status"] != "idle" and snap.get("pid") == pid:
-        parts.insert(0, f"**{snap['status'].upper()}** — current: "
-                        f"**{snap.get('current_word') or '…'}** "
-                        f"({snap.get('position', 0)}/{snap.get('total', 0)})")
+        done = counts["completed"] + counts["failed"] + counts["skipped"]
+        total = done + counts["queued"]
+        pct = 100.0 * counts["completed"] / total if total else 0.0
+        parts.append(f"queued <b>{counts['queued']}</b> · completed "
+                     f"<b>{counts['completed']}</b> · failed <b>{counts['failed']}</b> "
+                     f"· skipped <b>{counts['skipped']}</b>")
+
+    if running:
+        word = snap.get("current_word") or "…"
+        pos, tot = snap.get("position", 0), snap.get("total", 0)
+        if tot:
+            pct = 100.0 * pos / tot
+        label = f"{word} — {pos}/{tot}"
+        parts.insert(0, f"<b>{html.escape(snap['status'].upper())}</b> — current: "
+                        f"<b>{html.escape(str(word))}</b> ({pos}/{tot})")
         if snap.get("current_elapsed"):
             parts.append(f"current {snap['current_elapsed']:.0f}s")
         if snap.get("avg_seconds"):
             parts.append(f"avg {snap['avg_seconds']:.0f}s/word")
         if snap.get("eta_seconds"):
-            m, s = divmod(int(snap["eta_seconds"]), 60)
-            parts.append(f"≈{m}m{s:02d}s left")
+            m, sec = divmod(int(snap["eta_seconds"]), 60)
+            parts.append(f"≈{m}m{sec:02d}s left")
+            label += f" · ≈{m}m{sec:02d}s left"
         if snap.get("memory_note"):
-            parts.append(snap["memory_note"])
+            parts.append(html.escape(str(snap["memory_note"])))
     elif pid:
         prog = gp.load_progress(pid)
         if prog.get("last_word"):
-            parts.append(f"last: {prog['last_word']} ({prog.get('last_status')})")
-        parts.insert(0, "**idle**")
-    return " · ".join(parts) if parts else "**idle** — create or select a project."
+            parts.append(f"last: {html.escape(str(prog['last_word']))} "
+                         f"({html.escape(str(prog.get('last_status')))})")
+        parts.insert(0, "<b>idle</b>")
+
+    text = " · ".join(parts) if parts else "<b>idle</b> — create or select a project."
+    return (
+        f'<div id="gen-progress" class="gen-prog" '
+        f'data-run="{"running" if running else "idle"}" '
+        f'data-pct="{pct:.1f}" data-label="{html.escape(label, quote=True)}">'
+        f'<div class="gen-prog-track">'
+        f'<div class="gen-prog-fill" style="width:{max(0.0, min(100.0, pct)):.1f}%"></div>'
+        f'</div>'
+        f'<div class="gen-prog-text">{text}</div>'
+        f'</div>'
+    )
 
 
 def _log_text(pid: str) -> str:
@@ -287,7 +321,7 @@ def build_generator_tab(settings: dict):
     with gr.Row(elem_id="gen-topbar"):
         project_dd = gr.Dropdown(choices=projects, value=first_pid,
                                  label="Generator project", scale=3)
-        status_md = gr.Markdown(_status_md(first_pid), elem_classes="result-info")
+        status_md = gr.HTML(_status_html(first_pid), elem_classes="result-info")
     with gr.Row():
         start_btn = gr.Button("▶️ Start", variant="primary", size="sm")
         pause_btn = gr.Button("⏸ Pause after word", size="sm")
@@ -553,7 +587,7 @@ def build_generator_tab(settings: dict):
 
     def _refresh_tables(pid):
         return (_queue_rows(pid), _results_summary(pid), _failure_rows(pid),
-                _status_md(pid))
+                _status_html(pid))
 
     def _save_cfg(pid, *vals) -> dict:
         if not pid:
@@ -766,7 +800,7 @@ def build_generator_tab(settings: dict):
     # ---- run controls ---- #
     def ui_start(pid, *vals):
         _save_cfg(pid, *vals)  # Start always runs with what is on screen
-        return ge.RUNNER.start(pid), _status_md(pid)
+        return ge.RUNNER.start(pid), _status_html(pid)
 
     start_btn.click(ui_start, inputs=[project_dd] + setting_comps,
                     outputs=[ctrl_info, status_md])
@@ -777,7 +811,7 @@ def build_generator_tab(settings: dict):
         if not ids:
             raise gr.Error("Type the queue item IDs first.")
         gp.reset_items(pid, ids=ids, statuses=("failed", "skipped", "completed"))
-        return ge.RUNNER.start(pid, only_ids=ids), _status_md(pid)
+        return ge.RUNNER.start(pid, only_ids=ids), _status_html(pid)
 
     start_sel_btn.click(ui_start_selected,
                         inputs=[project_dd, sel_ids] + setting_comps,
@@ -786,7 +820,7 @@ def build_generator_tab(settings: dict):
     for btn, fn in ((pause_btn, ge.RUNNER.pause), (resume_btn, ge.RUNNER.resume),
                     (stop_btn, ge.RUNNER.stop), (skip_btn, ge.RUNNER.skip_current),
                     (cancel_btn, ge.RUNNER.cancel_current)):
-        btn.click(lambda pid, f=fn: (f(), _status_md(pid)), inputs=[project_dd],
+        btn.click(lambda pid, f=fn: (f(), _status_html(pid)), inputs=[project_dd],
                   outputs=[ctrl_info, status_md])
 
     # ---- timer refresh ---- #
@@ -795,7 +829,7 @@ def build_generator_tab(settings: dict):
     def ui_tick(pid):
         ev, obj, val = _last_outcome_panels(pid)
         running = ge.RUNNER.snapshot()["status"] != "idle"
-        return (_status_md(pid), _queue_rows(pid), _results_summary(pid),
+        return (_status_html(pid), _queue_rows(pid), _results_summary(pid),
                 _failure_rows(pid), _log_text(pid), ev, obj, val,
                 gr.update(choices=_completed_words(pid)) if not running else gr.update())
 

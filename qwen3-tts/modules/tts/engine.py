@@ -30,6 +30,7 @@ from .config import (
     active_repo,
     get_model,
     is_fish,
+    needs_load,
     voice_mode,
 )
 from .audio import (
@@ -131,7 +132,19 @@ def generate_one(
     p_sentence: float = DEFAULT_PAUSE_SENTENCE,
     p_comma: float = DEFAULT_PAUSE_COMMA,
     p_paragraph: float = DEFAULT_PAUSE_PARAGRAPH,
+    progress_cb=None,
 ) -> dict:
+    """Synthesize one clip.
+
+    progress_cb, if given, is called as (fraction, stage_key, fmt_dict) at each
+    stage of the run — the caller turns the stage key into a translated label
+    (see ui.ui_generate). Stage keys: prog_load, prog_part, prog_join,
+    prog_encode, prog_done.
+    """
+    def _tick(frac: float, stage: str, **fmt) -> None:
+        if progress_cb:
+            progress_cb(frac, stage, fmt)
+
     _require_ffmpeg()
 
     fish = is_fish(model_label)
@@ -226,6 +239,8 @@ def generate_one(
     eff_before = max(p_before, cfg["min_pad"])
     eff_after = max(p_after, cfg["min_pad"])
 
+    if needs_load(repo):
+        _tick(0.02, "prog_load", model=MODEL_SHORT[repo])
     model = get_model(repo)
     mm.set_task(f"TTS: generating ({MODEL_SHORT[repo]})…")
 
@@ -288,6 +303,10 @@ def generate_one(
                         f"TTS: generating ({MODEL_SHORT[repo]}) — "
                         f"part {idx + 1}/{len(segments)}…"
                     )
+                # 0.06 → 0.86 of the bar is the synthesis itself; joining,
+                # normalising and encoding share the rest.
+                _tick(0.06 + 0.80 * idx / len(segments), "prog_part",
+                      n=idx + 1, total=len(segments))
                 out_name = f"seg{idx:03d}"
                 kwargs = dict(
                     base_kwargs,
@@ -321,6 +340,7 @@ def generate_one(
             # for. It is inserted here, after normalisation, so it stays true
             # silence: loudnorm on a piece that already ended in a long gap would
             # pull the gap's noise floor up with the speech.
+            _tick(0.88, "prog_join")
             body_parts: list[Path] = []
             for i, (p, gap) in enumerate(produced):
                 np_ = tdp / f"n{i}.wav"
@@ -351,6 +371,7 @@ def generate_one(
             assembled = tdp / "assembled.wav"
             concat_wavs(parts, assembled)
 
+            _tick(0.95, "prog_encode", fmt=ext.upper())
             if ext == "wav":
                 shutil.copy2(assembled, cache_file)
             else:
@@ -358,6 +379,7 @@ def generate_one(
     finally:
         mm.set_task("idle")
 
+    _tick(1.0, "prog_done")
     friendly = unique_output_path(text, ext, cache_file)
     shutil.copy2(cache_file, friendly)
     return {
