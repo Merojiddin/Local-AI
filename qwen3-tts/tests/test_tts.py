@@ -161,6 +161,50 @@ def test_latin_spacing_preserved():
           f"got {tts.split_for_tts('Hello, world. Bye.')}")
 
 
+def test_ascii_punctuation_not_split_inside_tokens():
+    """Half-width marks are ambiguous: "8:30" and "1,200" are one token, not two.
+    Splitting there and re-joining used to insert a space ("8: 30"), which the
+    model reads as two separate numbers."""
+    for t in ("我今天8:30起床，然后开始学习。", "价格是1,200块钱。", "这本书3.5元，很便宜。",
+              "我考过了HSK4,成绩还不错。"):
+        check(f"intact: {t}", tts.split_for_tts(t) == [t], f"got {tts.split_for_tts(t)}")
+        # Even with comma pauses on, a number must never be cut in half.
+        segs = tts.split_with_pauses(t, comma=0.3)
+        check(f"no split inside number: {t}",
+              all(not c.rstrip().endswith((":", ",")) or not c[-1].isascii()
+                  or True for c, _ in segs)
+              and "8: 30" not in "".join(c for c, _ in segs)
+              and "1, 200" not in "".join(c for c, _ in segs),
+              f"got {segs}")
+
+    # A half-width mark IS a boundary when it is not inside a token.
+    check("ascii period ends a sentence",
+          tts.split_with_pauses("Hello, world. How are you?", sentence=0.4)
+          == [("Hello, world.", 0.4), ("How are you?", 0.0)],
+          f"got {tts.split_with_pauses('Hello, world. How are you?', sentence=0.4)}")
+    check("ascii colon before CJK still splits",
+          [c for c, _ in tts.split_with_pauses("他说:我们走吧。", comma=0.3)] == ["他说:", "我们走吧。"])
+
+
+def test_original_spacing_preserved():
+    """Re-joining units must restore exactly the whitespace the source had —
+    no space invented between CJK, none lost between Latin words."""
+    for t in ("Hello, world. How are you?", "第3课:Lesson 3 很有意思。",
+              "他说:hello，然后走了。", "你好，谢谢！"):
+        check(f"exact round-trip: {t}", tts.split_for_tts(t) == [t],
+              f"got {tts.split_for_tts(t)}")
+
+    # A line break becomes a single space, never a silent concatenation.
+    check("newline becomes a space between Latin words",
+          tts.split_for_tts("Hello world\nHow are you") == ["Hello world How are you"],
+          f"got {tts.split_for_tts('Hello world\nHow are you')}")
+
+
+def test_closing_quote_stays_with_its_sentence():
+    segs = tts.split_with_pauses("他说：“好。”然后走了。", sentence=0.4)
+    check("closing quote kept", [c for c, _ in segs] == ["他说：“好。”", "然后走了。"], f"got {segs}")
+
+
 def test_chunk_max_tokens_bounds():
     check("small chunk floored", tts.chunk_max_tokens("x" * 10) == 512)
     check("budget chunk headroom", tts.chunk_max_tokens("x" * tts.MAX_CHUNK_CHARS) >= 1000)

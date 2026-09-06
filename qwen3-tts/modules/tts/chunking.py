@@ -56,17 +56,32 @@ DEFAULT_PAUSE_COMMA = 0.0        # after ，、：  (off: comma breaks hurt flow
 DEFAULT_PAUSE_PARAGRAPH = 0.7    # at a line break
 MAX_PAUSE = 3.0
 
-_SENT_CHARS = "。！？!?；;…"
-_CLAUSE_CHARS = "，,、：:"
+# Full-width punctuation is unambiguous — in CJK text it is always a boundary.
+# Its half-width twin is not: "8:30", "1,200" and "3.5" are one token, not two,
+# so an ASCII mark only ends a unit when it is not sitting between two
+# alphanumerics. Without that guard the splitter cuts inside a number and the
+# rejoin puts a space there ("8: 30"), which the model then reads as two numbers.
+_FW_SENT = "。！？；…"
+_FW_CLAUSE = "，、："
+_HW_SENT = "!?;."
+_HW_CLAUSE = ",:"
+_SENT_CHARS = _FW_SENT + _HW_SENT
+_CLAUSE_CHARS = _FW_CLAUSE + _HW_CLAUSE
 # Quotes/brackets that close *after* the punctuation ("他说：“好。”") belong to the
 # sentence they end, not to the next one.
 _CLOSERS = "”’」』）)》〉】]"
 
-# One terminator = a run of sentence/clause punctuation, any closing quotes, and
-# the whitespace up to and including the line break that follows it. The bare
-# `\n+` alternative catches a line break with no punctuation before it.
+_FW = re.escape(_FW_SENT + _FW_CLAUSE)
+_HW = re.escape(_HW_SENT + _HW_CLAUSE)
+# A punctuation run: full-width marks freely, half-width ones only where they
+# are not enclosed by alphanumerics on both sides.
+_PUNCT_RUN = rf"(?:[{_FW}]|(?<![0-9A-Za-z])[{_HW}]|[{_HW}](?![0-9A-Za-z]))+"
+
+# One terminator = a punctuation run, any closing quotes, and the whitespace up
+# to and including the line break that follows it. The bare `\n+` alternative
+# catches a line break with no punctuation before it.
 _TERM = re.compile(
-    rf"[{re.escape(_SENT_CHARS + _CLAUSE_CHARS)}]+"
+    rf"{_PUNCT_RUN}"
     rf"[{re.escape(_CLOSERS)}]*"
     r"[^\S\n]*\n*"
     r"|\n+"
@@ -82,24 +97,18 @@ def _classify(term: str) -> str:
     return "clause"
 
 
-def _needs_space(a: str, b: str) -> bool:
-    """True when the whitespace stripped between two pieces has to come back.
-    Chinese needs no separator; Latin text does ("Hello," + "world.")."""
-    return bool(a and b and a[-1].isascii() and b[0].isascii() and not a[-1].isspace())
+def _split_units(text: str, max_chars: int) -> list[tuple[str, str, bool]]:
+    """Sentence/clause units in reading order as (text, boundary, space_before).
 
-
-def _join(a: str, b: str) -> str:
-    return a + " " + b if _needs_space(a, b) else a + b
-
-
-def _split_units(text: str, max_chars: int) -> list[tuple[str, str]]:
-    """Sentence/clause units in reading order, each tagged with the boundary
-    that ends it ('para' | 'sent' | 'clause' | '' for the trailing fragment).
+    `boundary` is 'para' | 'sent' | 'clause' | '' (the trailing fragment).
+    `space_before` records whether whitespace separated this unit from the
+    previous one in the source, so re-joining units restores the original
+    spacing exactly — Chinese needs no separator, "Hello, world." does, and
+    "8:30" must not gain one.
 
     A unit longer than max_chars has no punctuation to break on, so it is cut on
     raw length; only its final slice keeps the boundary (and therefore the pause).
     """
-    units: list[tuple[str, str]] = []
     pieces: list[tuple[str, str]] = []
     pos = 0
     for m in _TERM.finditer(text):
@@ -108,48 +117,60 @@ def _split_units(text: str, max_chars: int) -> list[tuple[str, str]]:
     if text[pos:]:
         pieces.append((text[pos:], ""))
 
+    units: list[tuple[str, str, bool]] = []
+    gap = False          # whitespace seen since the previous unit's last char
     for piece, kind in pieces:
         body = piece.strip()
         if not body:
+            gap = gap or bool(piece)
             continue
+        space = gap or piece[:1].isspace()
+        gap = piece[-1:].isspace()
         if len(body) <= max_chars:
-            units.append((body, kind))
+            units.append((body, kind, space))
             continue
         for i in range(0, len(body), max_chars):
             slice_ = body[i:i + max_chars]
             is_last = i + max_chars >= len(body)
-            units.append((slice_, kind if is_last else ""))
+            units.append((slice_, kind if is_last else "", space and i == 0))
     return units
 
 
-def _pack(units: list[str], max_chars: int) -> list[str]:
-    """Pack a run of units into the fewest chunks that each stay within
-    max_chars, keeping the pieces roughly equal in size (so there is no stubby
-    final chunk that reads oddly)."""
+def _pack(units: list[tuple[str, bool]], max_chars: int) -> list[str]:
+    """Pack a run of (text, space_before) units into the fewest chunks that each
+    stay within max_chars, keeping the pieces roughly equal in size (so there is
+    no stubby final chunk that reads oddly)."""
     if not units:
         return []
 
     # Aim for the fewest chunks possible, then even them out: packing to an even
-    # target avoids a long chunk followed by a stubby one (e.g. 182 + 24).
-    # The total counts the separators _join will put back, or a run of Latin
-    # units would be measured short and split when it did in fact fit.
-    total = sum(len(u) for u in units) + sum(
-        _needs_space(a, b) for a, b in zip(units, units[1:])
-    )
+    # target avoids a long chunk followed by a stubby one (e.g. 182 + 24). The
+    # total counts the separators that will be put back, or a run of Latin units
+    # would be measured short and split when it did in fact fit.
+    total = sum(len(t) for t, _ in units) + sum(1 for _, sp in units[1:] if sp)
     n_chunks = max(1, -(-total // max_chars))       # ceil(total / max_chars)
     target = -(-total // n_chunks)                   # ceil(total / n_chunks)
 
     chunks: list[str] = []
+    leads: list[bool] = []       # space_before of each chunk's first unit
     cur = ""
-    for u in units:
+    cur_lead = False
+    for text_, space in units:
+        if not cur:
+            cur, cur_lead = text_, space
+            continue
         # Flush before adding would overshoot the even target. target <= max_chars
         # and every unit <= max_chars, so no chunk can exceed max_chars.
-        if cur and len(_join(cur, u)) > target:
+        sep = " " if space else ""
+        if len(cur) + len(sep) + len(text_) > target:
             chunks.append(cur)
-            cur = ""
-        cur = _join(cur, u) if cur else u
+            leads.append(cur_lead)
+            cur, cur_lead = text_, space
+        else:
+            cur += sep + text_
     if cur:
         chunks.append(cur)
+        leads.append(cur_lead)
 
     # Fold a stubby trailing chunk back into its neighbour when it still fits —
     # a lone 20-char tail generated on its own reads worse than a fuller chunk.
@@ -159,10 +180,11 @@ def _pack(units: list[str], max_chars: int) -> list[str]:
     while (
         len(chunks) >= 2
         and len(chunks[-1]) < target * 0.6
-        and len(_join(chunks[-2], chunks[-1])) <= max_chars
+        and len(chunks[-2]) + (1 if leads[-1] else 0) + len(chunks[-1]) <= max_chars
     ):
         tail = chunks.pop()
-        chunks[-1] = _join(chunks[-1], tail)
+        tail_lead = leads.pop()
+        chunks[-1] += (" " if tail_lead else "") + tail
     return chunks
 
 
@@ -197,7 +219,7 @@ def split_with_pauses(
     pause["para"] = max(pause["para"], pause["sent"])
 
     out: list[tuple[str, float]] = []
-    run: list[str] = []
+    run: list[tuple[str, bool]] = []
 
     def flush(gap: float) -> None:
         if not run:
@@ -208,8 +230,8 @@ def split_with_pauses(
         if chunks and gap > 0:
             out[-1] = (out[-1][0], gap)
 
-    for body, kind in _split_units(text, max_chars):
-        run.append(body)
+    for body, kind, space in _split_units(text, max_chars):
+        run.append((body, space))
         if pause[kind] > 0:
             flush(pause[kind])
     flush(0.0)
