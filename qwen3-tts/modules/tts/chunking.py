@@ -1,5 +1,6 @@
 """Long-text chunking: split text into synthesis-sized pieces on sentence
-boundaries so a single over-long generation can't hit the token cap."""
+boundaries so a single over-long generation can't hit the token cap, and tag
+each piece with the silence to splice in after it."""
 
 from __future__ import annotations
 
@@ -35,47 +36,106 @@ MAX_CHUNK_CHARS = 200
 FISH_MAX_CHUNK_CHARS = 60
 FISH_MAX_TOKENS = 480
 
-_SENT_END = "。！？!?；;…\n"
-_SENT_SPLIT = re.compile(rf"[^{re.escape(_SENT_END)}]*[{re.escape(_SENT_END)}]?", re.UNICODE)
-_CLAUSE_END = "，,、：:"
-_CLAUSE_SPLIT = re.compile(rf"[^{re.escape(_CLAUSE_END)}]*[{re.escape(_CLAUSE_END)}]?", re.UNICODE)
+
+# --------------------------------------------------------------------------- #
+# Punctuation pauses
+# --------------------------------------------------------------------------- #
+# The model decides its own phrasing inside a single generation, and on long
+# input it routinely runs two sentences together with no breath between them.
+# Rather than fight the model, the boundary is made explicit: text is cut at the
+# punctuation the user wants a pause on, each side is generated separately, and
+# real silence is spliced in at the seam (see engine.generate_one).
+#
+# The cost is that a pause boundary is also a generation boundary, so prosody
+# restarts there. That is the right trade for teaching audio — a clean sentence
+# break beats continuous narration — but it is why every pause defaults low and
+# can be dialled to 0, which restores the old behaviour exactly: with all three
+# at 0 no boundary is forced and chunking is purely size-driven again.
+DEFAULT_PAUSE_SENTENCE = 0.35    # after 。！？；…
+DEFAULT_PAUSE_COMMA = 0.0        # after ，、：  (off: comma breaks hurt flow most)
+DEFAULT_PAUSE_PARAGRAPH = 0.7    # at a line break
+MAX_PAUSE = 3.0
+
+_SENT_CHARS = "。！？!?；;…"
+_CLAUSE_CHARS = "，,、：:"
+# Quotes/brackets that close *after* the punctuation ("他说：“好。”") belong to the
+# sentence they end, not to the next one.
+_CLOSERS = "”’」』）)》〉】]"
+
+# One terminator = a run of sentence/clause punctuation, any closing quotes, and
+# the whitespace up to and including the line break that follows it. The bare
+# `\n+` alternative catches a line break with no punctuation before it.
+_TERM = re.compile(
+    rf"[{re.escape(_SENT_CHARS + _CLAUSE_CHARS)}]+"
+    rf"[{re.escape(_CLOSERS)}]*"
+    r"[^\S\n]*\n*"
+    r"|\n+"
+)
 
 
-def _hard_pieces(sentence: str, max_chars: int) -> list[str]:
-    """Break an over-long sentence on clause punctuation, then on raw length."""
-    pieces: list[str] = []
-    for clause in _CLAUSE_SPLIT.findall(sentence):
-        clause = clause.strip()
-        if not clause:
+def _classify(term: str) -> str:
+    """Boundary kind for a matched terminator: paragraph > sentence > clause."""
+    if "\n" in term:
+        return "para"
+    if any(c in _SENT_CHARS for c in term):
+        return "sent"
+    return "clause"
+
+
+def _needs_space(a: str, b: str) -> bool:
+    """True when the whitespace stripped between two pieces has to come back.
+    Chinese needs no separator; Latin text does ("Hello," + "world.")."""
+    return bool(a and b and a[-1].isascii() and b[0].isascii() and not a[-1].isspace())
+
+
+def _join(a: str, b: str) -> str:
+    return a + " " + b if _needs_space(a, b) else a + b
+
+
+def _split_units(text: str, max_chars: int) -> list[tuple[str, str]]:
+    """Sentence/clause units in reading order, each tagged with the boundary
+    that ends it ('para' | 'sent' | 'clause' | '' for the trailing fragment).
+
+    A unit longer than max_chars has no punctuation to break on, so it is cut on
+    raw length; only its final slice keeps the boundary (and therefore the pause).
+    """
+    units: list[tuple[str, str]] = []
+    pieces: list[tuple[str, str]] = []
+    pos = 0
+    for m in _TERM.finditer(text):
+        pieces.append((text[pos:m.end()], _classify(m.group(0))))
+        pos = m.end()
+    if text[pos:]:
+        pieces.append((text[pos:], ""))
+
+    for piece, kind in pieces:
+        body = piece.strip()
+        if not body:
             continue
-        while len(clause) > max_chars:
-            pieces.append(clause[:max_chars])
-            clause = clause[max_chars:]
-        if clause:
-            pieces.append(clause)
-    return pieces
+        if len(body) <= max_chars:
+            units.append((body, kind))
+            continue
+        for i in range(0, len(body), max_chars):
+            slice_ = body[i:i + max_chars]
+            is_last = i + max_chars >= len(body)
+            units.append((slice_, kind if is_last else ""))
+    return units
 
 
-def split_for_tts(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[str]:
-    """Split text into the fewest synthesis chunks that each stay within
-    max_chars, breaking on sentence boundaries and keeping the pieces roughly
-    equal in size (so there is no stubby final chunk that reads oddly)."""
-    text = (text or "").strip()
-    if not text:
+def _pack(units: list[str], max_chars: int) -> list[str]:
+    """Pack a run of units into the fewest chunks that each stay within
+    max_chars, keeping the pieces roughly equal in size (so there is no stubby
+    final chunk that reads oddly)."""
+    if not units:
         return []
-    if len(text) <= max_chars:
-        return [text]
-
-    # Sentence units, hard-splitting any single sentence longer than the budget.
-    units: list[str] = []
-    for s in (s.strip() for s in _SENT_SPLIT.findall(text)):
-        if not s:
-            continue
-        units.extend(_hard_pieces(s, max_chars) if len(s) > max_chars else [s])
 
     # Aim for the fewest chunks possible, then even them out: packing to an even
     # target avoids a long chunk followed by a stubby one (e.g. 182 + 24).
-    total = sum(len(u) for u in units)
+    # The total counts the separators _join will put back, or a run of Latin
+    # units would be measured short and split when it did in fact fit.
+    total = sum(len(u) for u in units) + sum(
+        _needs_space(a, b) for a, b in zip(units, units[1:])
+    )
     n_chunks = max(1, -(-total // max_chars))       # ceil(total / max_chars)
     target = -(-total // n_chunks)                   # ceil(total / n_chunks)
 
@@ -84,10 +144,10 @@ def split_for_tts(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[str]:
     for u in units:
         # Flush before adding would overshoot the even target. target <= max_chars
         # and every unit <= max_chars, so no chunk can exceed max_chars.
-        if cur and len(cur) + len(u) > target:
+        if cur and len(_join(cur, u)) > target:
             chunks.append(cur)
             cur = ""
-        cur += u
+        cur = _join(cur, u) if cur else u
     if cur:
         chunks.append(cur)
 
@@ -99,11 +159,69 @@ def split_for_tts(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[str]:
     while (
         len(chunks) >= 2
         and len(chunks[-1]) < target * 0.6
-        and len(chunks[-2]) + len(chunks[-1]) <= max_chars
+        and len(_join(chunks[-2], chunks[-1])) <= max_chars
     ):
         tail = chunks.pop()
-        chunks[-1] += tail
+        chunks[-1] = _join(chunks[-1], tail)
     return chunks
+
+
+def split_with_pauses(
+    text: str,
+    max_chars: int = MAX_CHUNK_CHARS,
+    *,
+    sentence: float = 0.0,
+    comma: float = 0.0,
+    paragraph: float = 0.0,
+) -> list[tuple[str, float]]:
+    """Synthesis chunks paired with the silence (seconds) to splice in after each.
+
+    A boundary whose pause is above zero ends its chunk, so the silence lands
+    exactly on that punctuation mark. Boundaries with a zero pause are packed
+    together as before, letting one generation cover several sentences and keep
+    its prosody continuous. The final chunk never carries a pause — trailing
+    silence is the caller's "pause after" setting.
+    """
+    text = (text or "").strip()
+    if not text:
+        return []
+
+    pause = {
+        "sent": min(MAX_PAUSE, max(0.0, float(sentence))),
+        "clause": min(MAX_PAUSE, max(0.0, float(comma))),
+        "para": min(MAX_PAUSE, max(0.0, float(paragraph))),
+        "": 0.0,
+    }
+    # A line break is also a sentence end: never let it pause *less* than a plain
+    # full stop, or "。\n" would break more tightly than "。".
+    pause["para"] = max(pause["para"], pause["sent"])
+
+    out: list[tuple[str, float]] = []
+    run: list[str] = []
+
+    def flush(gap: float) -> None:
+        if not run:
+            return
+        chunks = _pack(run, max_chars)
+        run.clear()
+        out.extend((c, 0.0) for c in chunks)
+        if chunks and gap > 0:
+            out[-1] = (out[-1][0], gap)
+
+    for body, kind in _split_units(text, max_chars):
+        run.append(body)
+        if pause[kind] > 0:
+            flush(pause[kind])
+    flush(0.0)
+
+    if out:
+        out[-1] = (out[-1][0], 0.0)
+    return out
+
+
+def split_for_tts(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[str]:
+    """Chunk text for synthesis, ignoring pauses (size-driven splitting only)."""
+    return [c for c, _ in split_with_pauses(text, max_chars)]
 
 
 def chunk_max_tokens(chunk: str, fish: bool = False) -> int:

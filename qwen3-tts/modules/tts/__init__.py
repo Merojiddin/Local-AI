@@ -59,7 +59,16 @@ from .audio import (
     to_mp3,
 )
 from .naming import cache_hash, file_digest, safe_stub, unique_output_path
-from .chunking import MAX_CHUNK_CHARS, chunk_max_tokens, split_for_tts
+from .chunking import (
+    DEFAULT_PAUSE_COMMA,
+    DEFAULT_PAUSE_PARAGRAPH,
+    DEFAULT_PAUSE_SENTENCE,
+    MAX_CHUNK_CHARS,
+    MAX_PAUSE,
+    chunk_max_tokens,
+    split_for_tts,
+    split_with_pauses,
+)
 from .engine import (
     _resolve_mode,
     _resolve_model,
@@ -112,8 +121,13 @@ __all__ = [
     "get_model",
     "needs_load",
     "split_for_tts",
+    "split_with_pauses",
     "chunk_max_tokens",
     "MAX_CHUNK_CHARS",
+    "MAX_PAUSE",
+    "DEFAULT_PAUSE_SENTENCE",
+    "DEFAULT_PAUSE_COMMA",
+    "DEFAULT_PAUSE_PARAGRAPH",
     "generate_one",
     "parse_batch",
     "to_friendly_error",

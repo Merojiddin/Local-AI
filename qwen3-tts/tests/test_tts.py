@@ -88,6 +88,79 @@ def test_giant_sentence_hard_split():
     check("giant content preserved", _content("".join(chunks)) == _content(giant))
 
 
+def test_pauses_split_on_punctuation():
+    """A pause above 0 must land on the punctuation it names, which means the
+    chunk has to end there — that is what stops two sentences being read as one."""
+    text = "第一句话。第二句话。第三句话。"
+    # No pauses -> size-driven packing only, so this short text stays one chunk.
+    check(
+        "zero pauses keep one chunk",
+        tts.split_with_pauses(text) == [(text, 0.0)],
+        f"got {tts.split_with_pauses(text)}",
+    )
+
+    segs = tts.split_with_pauses(text, sentence=0.4)
+    check("sentence pause splits per sentence", len(segs) == 3, f"got {segs}")
+    check("every chunk ends at the full stop", all(c.endswith("。") for c, _ in segs))
+    check("gap after each but the last", [g for _, g in segs] == [0.4, 0.4, 0.0])
+    check("content preserved", _content("".join(c for c, _ in segs)) == _content(text))
+
+
+def test_pause_boundary_kinds():
+    # Commas break only when a comma pause is asked for.
+    t = "你好，谢谢！"
+    check("comma pause off -> one chunk", len(tts.split_with_pauses(t, sentence=0.4)) == 1)
+    segs = tts.split_with_pauses(t, sentence=0.4, comma=0.2)
+    check("comma pause splits the clause", [(c, g) for c, g in segs] == [("你好，", 0.2), ("谢谢！", 0.0)],
+          f"got {segs}")
+
+    # A line break is a paragraph boundary and outranks the full stop before it.
+    segs = tts.split_with_pauses("第一段。\n第二段。", sentence=0.3, paragraph=0.9)
+    check("line break uses the paragraph pause", [g for _, g in segs] == [0.9, 0.0], f"got {segs}")
+    check("newline stripped from chunk text", segs[0][0] == "第一段。", f"got {segs[0][0]!r}")
+
+    # A paragraph pause below the sentence pause is lifted to it: "。\n" must
+    # never break more tightly than a bare "。".
+    segs = tts.split_with_pauses("第一段。\n第二段。", sentence=0.5, paragraph=0.1)
+    check("paragraph pause floors at the sentence pause", segs[0][1] == 0.5, f"got {segs}")
+
+
+def test_pauses_respect_chunk_budget():
+    # Pause splitting must not defeat the token-cap protection: a single
+    # over-long sentence is still hard-split, and only its tail carries the pause.
+    giant = "这是一个非常长的没有句号的句子" * 20 + "。" + "短句。"
+    segs = tts.split_with_pauses(giant, sentence=0.4)
+    check(
+        "chunks still within budget",
+        all(len(c) <= tts.MAX_CHUNK_CHARS for c, _ in segs),
+        f"lens={[len(c) for c, _ in segs]}",
+    )
+    check("no trailing pause", segs[-1][1] == 0.0)
+    check("giant content preserved", _content("".join(c for c, _ in segs)) == _content(giant))
+    # Interior hard-split slices get no pause; only real sentence ends do.
+    check(
+        "pause count matches sentence ends",
+        sum(1 for _, g in segs if g > 0) == 1,
+        f"gaps={[g for _, g in segs]}",
+    )
+
+    # Pauses are clamped, never negative or unbounded.
+    segs = tts.split_with_pauses("甲。乙。", sentence=99.0)
+    check("pause clamped to MAX_PAUSE", segs[0][1] == tts.MAX_PAUSE, f"got {segs}")
+    segs = tts.split_with_pauses("甲。乙。", sentence=-5.0)
+    check("negative pause is no pause", len(segs) == 1, f"got {segs}")
+
+
+def test_latin_spacing_preserved():
+    # Fish is multilingual, so clause splitting must not glue English words.
+    segs = tts.split_with_pauses("Hello, world. Bye.", comma=0.2)
+    check("space restored across the comma split",
+          segs[0][0] == "Hello," and segs[1][0].startswith("world."), f"got {segs}")
+    check("no-pause packing keeps the space",
+          tts.split_for_tts("Hello, world. Bye.") == ["Hello, world. Bye."],
+          f"got {tts.split_for_tts('Hello, world. Bye.')}")
+
+
 def test_chunk_max_tokens_bounds():
     check("small chunk floored", tts.chunk_max_tokens("x" * 10) == 512)
     check("budget chunk headroom", tts.chunk_max_tokens("x" * tts.MAX_CHUNK_CHARS) >= 1000)

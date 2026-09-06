@@ -51,6 +51,14 @@ T = {
         "p_before": "Pause before (s)",
         "p_after": "Pause after (s)",
         "p_between": "Pause between repeats (s)",
+        "p_sentence": "Pause after 。！？ (s)",
+        "p_comma": "Pause after ，、 (s)",
+        "p_paragraph": "Pause at line break (s)",
+        "pause_hint": (
+            "Real silence is inserted at those marks. Any value above 0 also makes "
+            "that sentence its own take — a cleaner break, slightly less flowing "
+            "narration. Set all three to 0 for one continuous reading."
+        ),
         "repeat": "Repeat count",
         "sec_out": "💾 **Output**",
         "format": "Format",
@@ -129,6 +137,14 @@ T = {
         "p_before": "Nghỉ trước (giây)",
         "p_after": "Nghỉ sau (giây)",
         "p_between": "Nghỉ giữa các lần lặp (giây)",
+        "p_sentence": "Nghỉ sau 。！？ (giây)",
+        "p_comma": "Nghỉ sau ，、 (giây)",
+        "p_paragraph": "Nghỉ khi xuống dòng (giây)",
+        "pause_hint": (
+            "Chèn khoảng lặng thật tại các dấu này. Giá trị lớn hơn 0 cũng khiến mỗi "
+            "câu được tạo riêng — tách câu rõ hơn, giọng đọc bớt liền mạch một chút. "
+            "Đặt cả ba về 0 để đọc liền một mạch."
+        ),
         "repeat": "Số lần lặp",
         "sec_out": "💾 **Đầu ra**",
         "format": "Định dạng",
@@ -207,6 +223,13 @@ T = {
         "p_before": "前停顿（秒）",
         "p_after": "后停顿（秒）",
         "p_between": "重复间停顿（秒）",
+        "p_sentence": "句末停顿（秒）",
+        "p_comma": "逗号停顿（秒）",
+        "p_paragraph": "换行停顿（秒）",
+        "pause_hint": (
+            "在这些标点处插入真正的静音。数值大于 0 时，每句话会单独合成——"
+            "断句更清楚，但连贯感略降。三项都设为 0 则一气呵成地朗读。"
+        ),
         "repeat": "重复次数",
         "sec_out": "💾 **输出**",
         "format": "格式",

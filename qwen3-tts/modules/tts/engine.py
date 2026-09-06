@@ -40,10 +40,14 @@ from .audio import (
     to_mp3,
 )
 from .chunking import (
+    DEFAULT_PAUSE_COMMA,
+    DEFAULT_PAUSE_PARAGRAPH,
+    DEFAULT_PAUSE_SENTENCE,
     FISH_MAX_CHUNK_CHARS,
     MAX_CHUNK_CHARS,
+    MAX_PAUSE,
     chunk_max_tokens,
-    split_for_tts,
+    split_with_pauses,
 )
 from .naming import cache_hash, file_digest, unique_output_path
 
@@ -124,6 +128,9 @@ def generate_one(
     quality: str,
     ref_audio: str | None = None,
     ref_text: str = "",
+    p_sentence: float = DEFAULT_PAUSE_SENTENCE,
+    p_comma: float = DEFAULT_PAUSE_COMMA,
+    p_paragraph: float = DEFAULT_PAUSE_PARAGRAPH,
 ) -> dict:
     _require_ffmpeg()
 
@@ -169,6 +176,10 @@ def generate_one(
     p_before = max(0.0, min(2.0, float(p_before)))
     p_after = max(0.0, min(2.0, float(p_after)))
     p_between = max(0.0, min(2.0, float(p_between)))
+    # Punctuation pauses: silence spliced in at 。！？ / ，、 / line breaks.
+    p_sentence = max(0.0, min(MAX_PAUSE, float(p_sentence)))
+    p_comma = max(0.0, min(MAX_PAUSE, float(p_comma)))
+    p_paragraph = max(0.0, min(MAX_PAUSE, float(p_paragraph)))
 
     params = {
         "text": text,
@@ -180,6 +191,9 @@ def generate_one(
         "p_before": round(p_before, 3),
         "p_after": round(p_after, 3),
         "p_between": round(p_between, 3),
+        "p_sentence": round(p_sentence, 3),
+        "p_comma": round(p_comma, 3),
+        "p_paragraph": round(p_paragraph, 3),
         "repeat": repeat,
         "format": ext,
         "quality": kbps,
@@ -258,15 +272,21 @@ def generate_one(
 
             # Long text is synthesized in sentence-sized chunks so a single
             # over-long generation can't hit the token cap and trail off into
-            # silence. Each chunk is written as seg000.wav, seg001.wav, … and
-            # concatenated below in lexical (= reading) order.
+            # silence. Chunks also end wherever the user asked for a pause, so
+            # the silence can be spliced in at exactly that punctuation mark.
+            # Each chunk is written as seg000.wav, seg001.wav, … and joined
+            # below in reading order with its gap.
             chunk_chars = FISH_MAX_CHUNK_CHARS if fish else MAX_CHUNK_CHARS
-            chunks = split_for_tts(text, chunk_chars)
-            for idx, chunk in enumerate(chunks):
-                if len(chunks) > 1:
+            segments = split_with_pauses(
+                text, chunk_chars,
+                sentence=p_sentence, comma=p_comma, paragraph=p_paragraph,
+            )
+            produced: list[tuple[Path, float]] = []
+            for idx, (chunk, gap) in enumerate(segments):
+                if len(segments) > 1:
                     mm.set_task(
                         f"TTS: generating ({MODEL_SHORT[repo]}) — "
-                        f"part {idx + 1}/{len(chunks)}…"
+                        f"part {idx + 1}/{len(segments)}…"
                     )
                 out_name = f"seg{idx:03d}"
                 kwargs = dict(
@@ -282,10 +302,11 @@ def generate_one(
                         kwargs.pop(opt, None)
                     generate_audio(**kwargs)
 
-                if not (tdp / f"{out_name}.wav").exists():
+                seg = tdp / f"{out_name}.wav"
+                if not seg.exists():
                     raise RuntimeError(_no_audio_message(fish))
+                produced.append((seg, gap))
 
-            produced = sorted(tdp.glob("seg*.wav"))
             if not produced:
                 raise RuntimeError(_no_audio_message(fish))
 
@@ -295,15 +316,21 @@ def generate_one(
             # (single-chunk) and long (multi-chunk) generations at the same level
             # — otherwise the model's quiet native output leaves short clips far
             # quieter than the loudness-matched long ones.
-            if len(produced) == 1:
-                normalize_wav_loud(produced[0], base)
-            else:
-                norm_parts = []
-                for i, p in enumerate(produced):
-                    np_ = tdp / f"n{i}.wav"
-                    normalize_wav_loud(p, np_)
-                    norm_parts.append(np_)
-                concat_wavs(norm_parts, base)
+            #
+            # Between the pieces goes the punctuation silence the splitter asked
+            # for. It is inserted here, after normalisation, so it stays true
+            # silence: loudnorm on a piece that already ended in a long gap would
+            # pull the gap's noise floor up with the speech.
+            body_parts: list[Path] = []
+            for i, (p, gap) in enumerate(produced):
+                np_ = tdp / f"n{i}.wav"
+                normalize_wav_loud(p, np_)
+                body_parts.append(np_)
+                if gap > 0 and i < len(produced) - 1:
+                    s = tdp / f"g{i}.wav"
+                    make_silence(gap, s)
+                    body_parts.append(s)
+            concat_wavs(body_parts, base)
 
             parts: list[Path] = []
             if eff_before > 0:
