@@ -24,10 +24,16 @@ import re
 # across steps. That flattens peak memory to ~5 GB regardless of length, so the
 # budget below is bounded by generation coherence rather than by RAM.
 #
-# Chinese runs ~7 characters per second of speech, so 1000 chars is roughly a
-# 2.5-minute single take. Longer text still splits; the pieces are balanced to
-# roughly equal size and loudness-matched before joining (normalize_wav_loud).
-MAX_CHUNK_CHARS = 1000
+# The ceiling is now generation coherence, not RAM. This model degenerates into
+# a repetition loop if pushed too far — a synthetic 800-char probe ran to the
+# 4096-token cap and emitted 5.5 minutes of looping audio — so the budget stays
+# near what has actually been measured clean: 625 chars of natural prose reached
+# EOS normally at 1519 tokens, producing 121.5s of audio in one take (5.15 GB).
+# Measured 5.14 chars/sec, so 700 chars is ~2.3 minutes: it keeps a two-minute
+# read (~620 chars) in a single generation with a little margin, without
+# extrapolating far past verified territory. Longer text still splits; the pieces
+# are balanced and loudness-matched before joining (normalize_wav_loud).
+MAX_CHUNK_CHARS = 700
 
 # Fish S2 Pro is a different beast from the light 24 kHz Qwen models: it is a 4B
 # model at 44.1 kHz whose vocoder (codec.decode) materialises a whole chunk's

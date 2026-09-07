@@ -95,9 +95,10 @@ def test_giant_sentence_hard_split():
 def test_default_budget_holds_a_two_minute_read():
     # Every extra chunk is an independent generation and so an audible prosody
     # restart. The default budget must therefore keep an ordinary long read —
-    # a full two-minute one included — as a SINGLE generation. Chinese runs
-    # ~7 characters per second of speech, so two minutes is ~840 chars.
-    two_minutes = "字" * (120 * 7)
+    # a full two-minute one included — as a SINGLE generation. Measured on the
+    # 1.7B model: 625 chars of natural prose -> 121.5s of audio, i.e. 5.14
+    # chars/sec, so two minutes is ~620 chars.
+    two_minutes = "字" * 620
     chunks = tts.split_for_tts(two_minutes)
     check(
         "two-minute read stays one chunk",
