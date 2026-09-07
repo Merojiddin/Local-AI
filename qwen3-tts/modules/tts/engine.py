@@ -26,6 +26,7 @@ from .config import (
     SUPPORTS_REF,
     SUPPORTS_REF_TEXT,
     SUPPORTS_SPEED,
+    SUPPORTS_STREAM,
     VOICES,
     active_repo,
     get_model,
@@ -241,6 +242,23 @@ def generate_one(
                 join_audio=True,
                 verbose=False,
             )
+            # Decode the codec incrementally rather than materialising the whole
+            # waveform at once. The talker's autoregressive loop still runs
+            # unbroken over the entire chunk — only the vocoder is stepped, and it
+            # carries conv buffers plus a KV cache across steps, so the seams are
+            # continuous rather than the prosody restart that splitting the *text*
+            # causes. Peak memory goes flat (~5 GB instead of ~10 MB/token), which
+            # is what lets MAX_CHUNK_CHARS be large enough to keep a two-minute
+            # read in one take. Both flags are required: generate_audio only
+            # writes a file for a streamed run when save=True.
+            #
+            # Qwen only. Fish stays on the all-at-once path: it is a different
+            # model class whose 44.1 kHz vocoder hits the unraisable ~9.5 GiB
+            # single-buffer limit, which FISH_MAX_CHUNK_CHARS already works around.
+            if SUPPORTS_STREAM and not fish:
+                base_kwargs["stream"] = True
+                base_kwargs["save"] = True
+
             # Named speaker only for the Qwen CustomVoice models. Both Fish and
             # Qwen-Base cloning speak in the voice of the uploaded reference clip.
             if fish:
@@ -297,7 +315,8 @@ def generate_one(
                 try:
                     generate_audio(**kwargs)
                 except TypeError:
-                    for opt in ("instruct", "speed", "lang_code", "max_tokens"):
+                    for opt in ("instruct", "speed", "lang_code", "max_tokens",
+                                "stream", "save"):
                         kwargs.pop(opt, None)
                     generate_audio(**kwargs)
 

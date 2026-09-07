@@ -9,17 +9,25 @@ import re
 # --------------------------------------------------------------------------- #
 # Long-text chunking
 # --------------------------------------------------------------------------- #
-# The model generates a bounded number of tokens per call (~12.5 tokens/sec of
-# audio). A long paragraph fed in one shot can exceed that budget and trail off
-# into silence when the cap is hit mid-utterance, so long text is split on
-# sentence boundaries and each piece is synthesized separately, then joined.
-#
 # Each chunk is an independent generation, so its pace/intonation/loudness reset
-# at the boundary — audible as the reading "restarting". Two things keep that in
-# check: (1) the budget is large enough that a normal paragraph stays a SINGLE
-# coherent generation, and chunks are balanced to roughly equal size (no tiny
-# tail pieces); (2) chunks are loudness-matched before joining (normalize_wav_loud).
-MAX_CHUNK_CHARS = 200
+# at the boundary — audible as the reading "restarting". The budget is therefore
+# set as high as the hardware allows, so ordinary text (a full two-minute read
+# included) stays a SINGLE coherent generation and this splitting never happens.
+#
+# What used to cap it was memory, not the model. The vocoder materialised the
+# whole waveform in one pass, costing ~10 MB per generated token with nothing
+# bounding it: measured on an M2/16 GB, 600 chars peaked at 16.3 GB and two
+# minutes extrapolated to ~19 GB, past the machine's 17.2 GB — hence the old
+# 200-char budget. Qwen now generates with stream=True (see engine.py), which
+# leaves the talker's autoregressive loop unbroken across the whole text and
+# only decodes the codec incrementally, carrying conv buffers and a KV cache
+# across steps. That flattens peak memory to ~5 GB regardless of length, so the
+# budget below is bounded by generation coherence rather than by RAM.
+#
+# Chinese runs ~7 characters per second of speech, so 1000 chars is roughly a
+# 2.5-minute single take. Longer text still splits; the pieces are balanced to
+# roughly equal size and loudness-matched before joining (normalize_wav_loud).
+MAX_CHUNK_CHARS = 1000
 
 # Fish S2 Pro is a different beast from the light 24 kHz Qwen models: it is a 4B
 # model at 44.1 kHz whose vocoder (codec.decode) materialises a whole chunk's

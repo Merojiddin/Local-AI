@@ -29,6 +29,10 @@ SUPPORTS_SPEED = "speed" in _GEN_PARAMS
 SUPPORTS_LANG = "lang_code" in _GEN_PARAMS
 SUPPORTS_REF = "ref_audio" in _GEN_PARAMS
 SUPPORTS_REF_TEXT = "ref_text" in _GEN_PARAMS
+# Streaming decode needs BOTH flags: generate_audio only writes a file for a
+# streamed run when save=True (`save_streamed_audio = stream and save`), so
+# stream=True on its own would silently produce no output.
+SUPPORTS_STREAM = "stream" in _GEN_PARAMS and "save" in _GEN_PARAMS
 
 MODELS = {
     "Higher Quality — Qwen3-TTS 1.7B": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",

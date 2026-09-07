@@ -52,11 +52,14 @@ def test_short_text_single_chunk():
 
 
 def test_long_text_chunked_within_budget():
-    chunks = tts.split_for_tts(ESSAY)
+    # Explicit budget so this exercises the splitter itself rather than the
+    # module default, which is now large enough to hold the essay in one take.
+    budget = 200
+    chunks = tts.split_for_tts(ESSAY, max_chars=budget)
     check("essay splits into several chunks", len(chunks) >= 2, f"got {len(chunks)}")
     check(
         "every chunk within budget",
-        all(len(c) <= tts.MAX_CHUNK_CHARS for c in chunks),
+        all(len(c) <= budget for c in chunks),
         f"lens={[len(c) for c in chunks]}",
     )
     check("no empty chunks", all(c.strip() for c in chunks))
@@ -78,14 +81,29 @@ def test_giant_sentence_hard_split():
     # A single clause with no sentence-ending punctuation still gets broken up
     # so no chunk can blow the token budget.
     giant = "这是一个非常长的没有句号的句子" * 20
-    chunks = tts.split_for_tts(giant)
+    budget = 200
+    chunks = tts.split_for_tts(giant, max_chars=budget)
     check("giant sentence is split", len(chunks) >= 2, f"got {len(chunks)}")
     check(
         "hard-split chunks within budget",
-        all(len(c) <= tts.MAX_CHUNK_CHARS for c in chunks),
+        all(len(c) <= budget for c in chunks),
         f"lens={[len(c) for c in chunks]}",
     )
     check("giant content preserved", _content("".join(chunks)) == _content(giant))
+
+
+def test_default_budget_holds_a_two_minute_read():
+    # Every extra chunk is an independent generation and so an audible prosody
+    # restart. The default budget must therefore keep an ordinary long read —
+    # a full two-minute one included — as a SINGLE generation. Chinese runs
+    # ~7 characters per second of speech, so two minutes is ~840 chars.
+    two_minutes = "字" * (120 * 7)
+    chunks = tts.split_for_tts(two_minutes)
+    check(
+        "two-minute read stays one chunk",
+        len(chunks) == 1,
+        f"budget={tts.MAX_CHUNK_CHARS}, got {len(chunks)} chunks",
+    )
 
 
 def test_chunk_max_tokens_bounds():
