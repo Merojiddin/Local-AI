@@ -38,18 +38,13 @@ from .audio import (
     concat_wavs,
     make_silence,
     normalize_wav_loud,
-    stretch_silences,
     to_mp3,
 )
 from .chunking import (
-    DEFAULT_PAUSE_COMMA,
-    DEFAULT_PAUSE_PARAGRAPH,
-    DEFAULT_PAUSE_SENTENCE,
     FISH_MAX_CHUNK_CHARS,
     MAX_CHUNK_CHARS,
-    MAX_PAUSE,
     chunk_max_tokens,
-    split_with_pauses,
+    split_for_tts,
 )
 from .naming import cache_hash, file_digest, unique_output_path
 
@@ -130,9 +125,6 @@ def generate_one(
     quality: str,
     ref_audio: str | None = None,
     ref_text: str = "",
-    p_sentence: float = DEFAULT_PAUSE_SENTENCE,
-    p_comma: float = DEFAULT_PAUSE_COMMA,
-    p_paragraph: float = DEFAULT_PAUSE_PARAGRAPH,
     progress_cb=None,
 ) -> dict:
     """Synthesize one clip.
@@ -190,10 +182,6 @@ def generate_one(
     p_before = max(0.0, min(2.0, float(p_before)))
     p_after = max(0.0, min(2.0, float(p_after)))
     p_between = max(0.0, min(2.0, float(p_between)))
-    # Punctuation pauses: silence spliced in at 。！？ / ，、 / line breaks.
-    p_sentence = max(0.0, min(MAX_PAUSE, float(p_sentence)))
-    p_comma = max(0.0, min(MAX_PAUSE, float(p_comma)))
-    p_paragraph = max(0.0, min(MAX_PAUSE, float(p_paragraph)))
 
     params = {
         "text": text,
@@ -205,9 +193,6 @@ def generate_one(
         "p_before": round(p_before, 3),
         "p_after": round(p_after, 3),
         "p_between": round(p_between, 3),
-        "p_sentence": round(p_sentence, 3),
-        "p_comma": round(p_comma, 3),
-        "p_paragraph": round(p_paragraph, 3),
         "repeat": repeat,
         "format": ext,
         "quality": kbps,
@@ -288,26 +273,20 @@ def generate_one(
 
             # Long text is synthesized in sentence-sized chunks so a single
             # over-long generation can't hit the token cap and trail off into
-            # silence. Only a paragraph break additionally forces a split, so
-            # the gap can be spliced in at exactly that line break; sentence and
-            # clause pauses are applied to the finished audio instead (below),
-            # keeping an essay to a handful of long, prosodically continuous
-            # generations rather than one short take per sentence.
-            # Each chunk is written as seg000.wav, seg001.wav, … and joined
-            # below in reading order with its gap.
+            # silence. Each chunk is written as seg000.wav, seg001.wav, … and
+            # concatenated below in lexical (= reading) order.
             chunk_chars = FISH_MAX_CHUNK_CHARS if fish else MAX_CHUNK_CHARS
-            segments = split_with_pauses(text, chunk_chars, paragraph=p_paragraph)
-            produced: list[tuple[Path, float]] = []
-            for idx, (chunk, gap) in enumerate(segments):
-                if len(segments) > 1:
+            chunks = split_for_tts(text, chunk_chars)
+            for idx, chunk in enumerate(chunks):
+                if len(chunks) > 1:
                     mm.set_task(
                         f"TTS: generating ({MODEL_SHORT[repo]}) — "
-                        f"part {idx + 1}/{len(segments)}…"
+                        f"part {idx + 1}/{len(chunks)}…"
                     )
                 # 0.06 → 0.86 of the bar is the synthesis itself; joining,
                 # normalising and encoding share the rest.
-                _tick(0.06 + 0.80 * idx / len(segments), "prog_part",
-                      n=idx + 1, total=len(segments))
+                _tick(0.06 + 0.80 * idx / len(chunks), "prog_part",
+                      n=idx + 1, total=len(chunks))
                 out_name = f"seg{idx:03d}"
                 kwargs = dict(
                     base_kwargs,
@@ -322,11 +301,10 @@ def generate_one(
                         kwargs.pop(opt, None)
                     generate_audio(**kwargs)
 
-                seg = tdp / f"{out_name}.wav"
-                if not seg.exists():
+                if not (tdp / f"{out_name}.wav").exists():
                     raise RuntimeError(_no_audio_message(fish))
-                produced.append((seg, gap))
 
+            produced = sorted(tdp.glob("seg*.wav"))
             if not produced:
                 raise RuntimeError(_no_audio_message(fish))
 
@@ -336,29 +314,16 @@ def generate_one(
             # (single-chunk) and long (multi-chunk) generations at the same level
             # — otherwise the model's quiet native output leaves short clips far
             # quieter than the loudness-matched long ones.
-            #
-            # Each piece then has its own pauses stretched: the gaps the model
-            # already left at sentence ends are padded out to the requested
-            # length. This runs after loudnorm (which would otherwise pull a long
-            # gap's noise floor up with the speech) and before the paragraph
-            # silence is spliced between pieces, so an inserted paragraph gap is
-            # never itself re-detected and stretched again.
             _tick(0.88, "prog_join")
-            body_parts: list[Path] = []
-            for i, (p, gap) in enumerate(produced):
-                np_ = tdp / f"n{i}.wav"
-                normalize_wav_loud(p, np_)
-                if p_sentence > 0 or p_comma > 0:
-                    st = tdp / f"t{i}.wav"
-                    stretch_silences(np_, st, tdp, f"w{i}_",
-                                     sentence=p_sentence, comma=p_comma)
-                    np_ = st
-                body_parts.append(np_)
-                if gap > 0 and i < len(produced) - 1:
-                    s = tdp / f"g{i}.wav"
-                    make_silence(gap, s)
-                    body_parts.append(s)
-            concat_wavs(body_parts, base)
+            if len(produced) == 1:
+                normalize_wav_loud(produced[0], base)
+            else:
+                norm_parts = []
+                for i, p in enumerate(produced):
+                    np_ = tdp / f"n{i}.wav"
+                    normalize_wav_loud(p, np_)
+                    norm_parts.append(np_)
+                concat_wavs(norm_parts, base)
 
             parts: list[Path] = []
             if eff_before > 0:

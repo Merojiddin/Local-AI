@@ -31,12 +31,6 @@ from .config import (
     is_fish,
     needs_load,
 )
-from .chunking import (
-    DEFAULT_PAUSE_COMMA,
-    DEFAULT_PAUSE_PARAGRAPH,
-    DEFAULT_PAUSE_SENTENCE,
-    MAX_PAUSE,
-)
 from .i18n import DEFAULT_LANG, mode_choices, model_choices, tr
 from .engine import generate_one, parse_batch, to_friendly_error
 from .library import lib_html, ui_files_refresh, ui_lib_event
@@ -51,9 +45,6 @@ def ui_generate(
     p_before, p_after, p_between, repeat, out_format, quality,
     ref_audio=None, ref_text="",
     lang=DEFAULT_LANG,
-    p_sentence=DEFAULT_PAUSE_SENTENCE,
-    p_comma=DEFAULT_PAUSE_COMMA,
-    p_paragraph=DEFAULT_PAUSE_PARAGRAPH,
     progress=gr.Progress(),
 ):
     # generate_one reports stage keys; translate them here so the progress bar
@@ -70,7 +61,6 @@ def ui_generate(
             text, model_label, voice, mode, speed, style,
             p_before, p_after, p_between, repeat, out_format, quality,
             ref_audio=ref_audio, ref_text=ref_text,
-            p_sentence=p_sentence, p_comma=p_comma, p_paragraph=p_paragraph,
             progress_cb=on_stage,
         )
     except Exception as exc:  # noqa: BLE001 - surfaced to the user
@@ -91,9 +81,6 @@ def ui_batch(
     p_before, p_after, p_between, repeat, out_format, quality,
     ref_audio=None, ref_text="",
     lang=DEFAULT_LANG,
-    p_sentence=DEFAULT_PAUSE_SENTENCE,
-    p_comma=DEFAULT_PAUSE_COMMA,
-    p_paragraph=DEFAULT_PAUSE_PARAGRAPH,
     progress=gr.Progress(),
 ):
     try:
@@ -116,7 +103,6 @@ def ui_batch(
                 r["text"], r["model_label"], r["voice"], r["mode"], r["speed"],
                 style, p_before, p_after, p_between, repeat, out_format, quality,
                 ref_audio=ref_audio, ref_text=ref_text,
-                p_sentence=p_sentence, p_comma=p_comma, p_paragraph=p_paragraph,
             )
             results[i] = {
                 "text": r["text"],
@@ -267,22 +253,6 @@ def build_tts_tab(lang_component, settings: dict):
                         p_before = gr.Slider(0, 2, value=0.0, step=0.05, label=tr(L0, "p_before"))
                         p_after = gr.Slider(0, 2, value=0.0, step=0.05, label=tr(L0, "p_after"))
                         p_between = gr.Slider(0, 2, value=0.3, step=0.05, label=tr(L0, "p_between"))
-                    # Punctuation pauses — the cure for two sentences running
-                    # together in one long take. See chunking.split_with_pauses.
-                    with gr.Row():
-                        p_sentence = gr.Slider(
-                            0, MAX_PAUSE, value=DEFAULT_PAUSE_SENTENCE, step=0.05,
-                            label=tr(L0, "p_sentence"),
-                        )
-                        p_comma = gr.Slider(
-                            0, MAX_PAUSE, value=DEFAULT_PAUSE_COMMA, step=0.05,
-                            label=tr(L0, "p_comma"),
-                        )
-                        p_paragraph = gr.Slider(
-                            0, MAX_PAUSE, value=DEFAULT_PAUSE_PARAGRAPH, step=0.05,
-                            label=tr(L0, "p_paragraph"),
-                        )
-                    pause_hint = gr.Markdown(tr(L0, "pause_hint"), elem_classes="hint-text")
 
                 # Saved clone voices sit under Pronunciation, not next to the
                 # uploader that fills them: the Voice column is by far the
@@ -456,8 +426,7 @@ def build_tts_tab(lang_component, settings: dict):
             fn=ui_generate,
             inputs=[text, model_label, voice, mode, speed, style,
                     p_before, p_after, p_between, repeat, out_format, quality,
-                    ref_audio, ref_text, lang_component,
-                    p_sentence, p_comma, p_paragraph],
+                    ref_audio, ref_text, lang_component],
             outputs=[audio_out, file_out, info_out],
             # Keep the in-place progress overlay on the player instead of
             # smearing it across the download button and the result text.
@@ -527,19 +496,6 @@ def build_tts_tab(lang_component, settings: dict):
                         with gr.Row():
                             b_between = gr.Slider(0, 2, value=0.3, step=0.05, label=tr(L0, "p_between"))
                             b_repeat = gr.Slider(1, 5, value=1, step=1, label=tr(L0, "repeat"))
-                        with gr.Row():
-                            b_sentence = gr.Slider(
-                                0, MAX_PAUSE, value=DEFAULT_PAUSE_SENTENCE, step=0.05,
-                                label=tr(L0, "p_sentence"),
-                            )
-                            b_comma = gr.Slider(
-                                0, MAX_PAUSE, value=DEFAULT_PAUSE_COMMA, step=0.05,
-                                label=tr(L0, "p_comma"),
-                            )
-                            b_paragraph = gr.Slider(
-                                0, MAX_PAUSE, value=DEFAULT_PAUSE_PARAGRAPH, step=0.05,
-                                label=tr(L0, "p_paragraph"),
-                            )
                     with gr.Row():
                         b_format = gr.Radio(choices=FORMATS, value=DEFAULT_FORMAT, label=tr(L0, "format"))
                         b_quality = gr.Radio(choices=QUALITIES, value=DEFAULT_QUALITY, label=tr(L0, "quality"))
@@ -590,8 +546,7 @@ def build_tts_tab(lang_component, settings: dict):
             fn=ui_batch,
             inputs=[batch_text, batch_csv, b_voice, b_model, b_mode, b_speed, b_style,
                     b_before, b_after, b_between, b_repeat, b_format, b_quality,
-                    b_ref_audio, b_ref_text, lang_component,
-                    b_sentence, b_comma, b_paragraph],
+                    b_ref_audio, b_ref_text, lang_component],
             outputs=[batch_table, batch_zip, batch_summary],
         )
 
@@ -607,11 +562,9 @@ def build_tts_tab(lang_component, settings: dict):
         sec_out, out_format, quality, generate_btn, audio_out, file_out,
         sec_pron, mode, speed, style, acc_examples,
         p_before, p_after, p_between, repeat,
-        p_sentence, p_comma, p_paragraph, pause_hint,
         sec_files, file_text,
         batch_desc, batch_text, batch_csv, b_defaults, b_model, b_voice, b_speed,
         b_mode, b_style, b_acc_adv, b_before, b_after, b_between, b_repeat,
-        b_sentence, b_comma, b_paragraph,
         b_format, b_quality, batch_btn, batch_zip, batch_table,
         footer,
         ref_audio, ref_text, clone_note, b_ref_audio, b_ref_text,
@@ -643,10 +596,6 @@ def build_tts_tab(lang_component, settings: dict):
             gr.update(label=tr(lg, "p_after")),                                      # p_after
             gr.update(label=tr(lg, "p_between")),                                    # p_between
             gr.update(label=tr(lg, "repeat")),                                       # repeat
-            gr.update(label=tr(lg, "p_sentence")),                                   # p_sentence
-            gr.update(label=tr(lg, "p_comma")),                                      # p_comma
-            gr.update(label=tr(lg, "p_paragraph")),                                  # p_paragraph
-            gr.update(value=tr(lg, "pause_hint")),                                   # pause_hint
             gr.update(value=f"📁 **{tr(lg, 'tab_files')}**"),                        # sec_files
             gr.update(label=tr(lg, "file_text")),                                    # file_text
             gr.update(value=tr(lg, "batch_desc")),                                   # batch_desc
@@ -663,9 +612,6 @@ def build_tts_tab(lang_component, settings: dict):
             gr.update(label=tr(lg, "p_after")),                                      # b_after
             gr.update(label=tr(lg, "p_between")),                                    # b_between
             gr.update(label=tr(lg, "repeat")),                                       # b_repeat
-            gr.update(label=tr(lg, "p_sentence")),                                   # b_sentence
-            gr.update(label=tr(lg, "p_comma")),                                      # b_comma
-            gr.update(label=tr(lg, "p_paragraph")),                                  # b_paragraph
             gr.update(label=tr(lg, "format")),                                       # b_format
             gr.update(label=tr(lg, "quality")),                                      # b_quality
             gr.update(value=tr(lg, "batch_btn")),                                    # batch_btn

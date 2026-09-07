@@ -51,14 +51,6 @@ T = {
         "p_before": "Pause before (s)",
         "p_after": "Pause after (s)",
         "p_between": "Pause between repeats (s)",
-        "p_sentence": "Min pause after 。！？ (s)",
-        "p_comma": "Min pause after ，、 (s)",
-        "p_paragraph": "Pause at line break (s)",
-        "pause_hint": (
-            "Stretches the pauses the model already leaves at those marks, so nothing "
-            "is re-read and the voice and pacing stay exactly as generated. A line "
-            "break additionally starts a new take."
-        ),
         "repeat": "Repeat count",
         "sec_out": "💾 **Output**",
         "format": "Format",
@@ -143,14 +135,6 @@ T = {
         "p_before": "Nghỉ trước (giây)",
         "p_after": "Nghỉ sau (giây)",
         "p_between": "Nghỉ giữa các lần lặp (giây)",
-        "p_sentence": "Nghỉ tối thiểu sau 。！？ (giây)",
-        "p_comma": "Nghỉ tối thiểu sau ，、 (giây)",
-        "p_paragraph": "Nghỉ khi xuống dòng (giây)",
-        "pause_hint": (
-            "Kéo dài những khoảng nghỉ mà mô hình vốn đã tạo ở các dấu này, nên không "
-            "đọc lại gì cả — giọng và nhịp giữ nguyên. Xuống dòng sẽ bắt đầu một đoạn "
-            "thu mới."
-        ),
         "repeat": "Số lần lặp",
         "sec_out": "💾 **Đầu ra**",
         "format": "Định dạng",
@@ -235,13 +219,6 @@ T = {
         "p_before": "前停顿（秒）",
         "p_after": "后停顿（秒）",
         "p_between": "重复间停顿（秒）",
-        "p_sentence": "句末最短停顿（秒）",
-        "p_comma": "逗号最短停顿（秒）",
-        "p_paragraph": "换行停顿（秒）",
-        "pause_hint": (
-            "把模型本来就有的停顿拉长，不会重新朗读，音色和语速完全保持不变。"
-            "换行则会另起一段生成。"
-        ),
         "repeat": "重复次数",
         "sec_out": "💾 **输出**",
         "format": "格式",
